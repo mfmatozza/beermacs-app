@@ -505,11 +505,16 @@ model AuditEntry {
 
 // ─── News ───────────────────────────────────────────────────────────────────
 
-/// The venue's announcement feed on Home. The primary advertising surface, and
-/// the trigger for a broadcast push.
+/// The announcement feed on Home. The primary advertising surface, and the
+/// trigger for a broadcast push.
+///
+/// `venueId` is NULLABLE on purpose: a null venue is a platform-wide post from
+/// us, which everyone sees regardless of which bar they are at. A venue post is
+/// only shown to people at that venue. Both render identically apart from the
+/// byline, so one feed and one composer serve both.
 model News {
   id          String    @id @default(cuid())
-  venueId     String
+  venueId     String?
   authorId    String?
   title       String
   body        String
@@ -520,10 +525,11 @@ model News {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  venue  Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  author User? @relation("NewsAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  venue  Venue? @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  author User?  @relation("NewsAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([venueId, publishedAt])
+  @@index([publishedAt])
 }
 
 // ─── Chat ───────────────────────────────────────────────────────────────────

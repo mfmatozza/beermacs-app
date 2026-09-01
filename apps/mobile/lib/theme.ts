@@ -28,7 +28,8 @@ export const raw = {
   /// Tab bar tints. Icon colours are props, not classes, so `className`
   /// cannot reach them — they have to be values.
   tabActive: "#F5A300",
-  tabInactive: "#6E6555",
+  tabInactive: "#8A8070",
+  textFaint: "#8A8070",
 } as const;
 
 /**

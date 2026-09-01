@@ -28,13 +28,19 @@ module.exports = {
           400: "#C6B392",
         },
         // The glass. Warm-biased neutrals, never a pure grey.
+        //
+        // Lifted across the board from the first pass, which read as a black
+        // rectangle on a phone. Cards now sit two steps off the ground instead
+        // of one, and 900 is only used where something must recede — the
+        // ambient shader paints the real background.
         stout: {
-          400: "#4A4136",
-          500: "#332D24",
-          600: "#25211B",
-          700: "#1C1915",
-          800: "#151310",
-          850: "#0F0E0C",
+          400: "#5A4F41",
+          500: "#413830",
+          600: "#302A23",
+          700: "#241F1A",
+          750: "#1D1915",
+          800: "#171410",
+          850: "#12100D",
           900: "#0A0908",
         },
         // Type on dark.
@@ -45,9 +51,17 @@ module.exports = {
         },
         // Match state. Deliberately off the amber axis so state never reads as
         // brand: a green pill means "in play", not "on brand".
-        live: { DEFAULT: "#57A46E", wash: "#1E3326" },
-        dispute: { DEFAULT: "#D9503C", wash: "#3A1A15" },
-        notice: { DEFAULT: "#4F8DA6", wash: "#16292F" },
+        live: { DEFAULT: "#63B87C", wash: "#20392A" },
+        dispute: { DEFAULT: "#E05B45", wash: "#401D17" },
+        notice: { DEFAULT: "#5C9FBA", wash: "#182E35" },
+
+        /// Translucent amber, for glow and lit edges. Layered over the ambient
+        /// shader rather than over a solid colour, so these are rgba.
+        glow: {
+          soft: "rgba(245, 163, 0, 0.14)",
+          edge: "rgba(245, 163, 0, 0.40)",
+          rim: "rgba(255, 205, 120, 0.55)",
+        },
       },
       fontFamily: {
         // Values must match the keys passed to `useFonts` in lib/use-app-boot.ts.

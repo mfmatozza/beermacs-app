@@ -92,5 +92,39 @@ how many teams are already in. A map answers only the first.
 `Venue` already carries `latitude`/`longitude`, so the data is there when the
 map is wanted.
 
-**Revisit when:** venues get dense enough in one city that "which of these four
-is nearest to me right now" stops being obvious from a sorted list.
+**Revisit when:** after milestone 12 — confirmed. Search over the affiliated
+bars carries it until then, and `Venue` already stores lat/lng so the map is a
+new component rather than a migration.
+
+---
+
+## D7 — Home does not assume a venue
+
+**Chosen:** Home always leads with "which bar are you at?" — a search field over
+the affiliated bars.
+**Over:** showing the venue you are already registered at, with the picker as a
+fallback (what the first build did).
+
+The app deciding for you is worse than one tap: someone can walk from one
+affiliated bar to another on the same night, and a Home screen that has silently
+locked onto the wrong one is confusing in a way an explicit list never is. What
+is happening *inside* a tournament lives on the Bracket tab.
+
+**Revisit when:** never, probably — but if the picker becomes a nuisance for
+regulars, remember the last venue and pre-scroll to it rather than skipping the
+question.
+
+---
+
+## D8 — News is platform-wide as well as per-venue
+
+`News.venueId` is nullable. A null venue is a post from us, shown to everyone
+regardless of which bar they are at; a set venue is shown to that venue's
+players. Both render as the same card apart from the byline, which is amber for
+ours.
+
+That is what makes Home worth opening on a night you are not playing, which is
+the whole argument for the feed being the advertising surface.
+
+Post images are supported (`News.imageUrl`). The two in the fixtures are
+generated abstract art, deliberately not fake photography.
