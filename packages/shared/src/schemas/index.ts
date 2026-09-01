@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { joinCodeLength, normaliseJoinCode } from "../join-code";
 
 // Zod schemas are the single source of truth for anything crossing the network
 // boundary. TS types are inferred from them (`z.infer<...>`), never duplicated.
@@ -11,10 +12,24 @@ const uuid = z.string().uuid();
 
 // ── Joining ─────────────────────────────────────────────────────────────────
 
-/** Payload for POST /rpc/join_tournament — the code off the table tent. */
+/**
+ * Payload for POST /api/tournaments/join — the code off the table tent.
+ *
+ * The code is normalised INSIDE the schema, not by the caller. Validating the
+ * raw string first defeats the point of tolerant codes: "4kq-7bm" is exactly
+ * what someone types, and a length check that runs before the dash is stripped
+ * rejects a perfectly good code. Because this schema is shared, the app and the
+ * route handler now normalise identically and neither has to trust the other.
+ */
 export const joinTournamentInput = z.object({
-  // Normalised client-side by `normaliseJoinCode` before it gets here.
-  code: z.string().length(6),
+  code: z
+    .string()
+    .min(1)
+    .max(32)
+    .transform(normaliseJoinCode)
+    .refine((c) => c.length === joinCodeLength, {
+      message: `Join codes are ${joinCodeLength} characters`,
+    }),
   displayName: z.string().trim().min(1).max(40),
 });
 export type JoinTournamentInput = z.infer<typeof joinTournamentInput>;

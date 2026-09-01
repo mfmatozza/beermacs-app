@@ -10,6 +10,7 @@ import { DMSans_700Bold } from "@expo-google-fonts/dm-sans/700Bold";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
+import { ensureSession } from "./auth-client";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -24,6 +25,8 @@ export interface AppBoot {
   readonly ready: boolean;
   /** Set when boot failed but we're proceeding anyway, for a toast later. */
   readonly degraded: string | null;
+  /** False when we could not reach the API — bar wifi, usually. */
+  readonly online: boolean;
 }
 
 export function useAppBoot(): AppBoot {
@@ -35,6 +38,21 @@ export function useAppBoot(): AppBoot {
   });
 
   const [timedOut, setTimedOut] = useState(false);
+  const [online, setOnline] = useState(true);
+
+  // Make sure the device has a session, creating an anonymous one if not.
+  // Deliberately NOT part of `ready`: a bar's wifi should not be able to hold
+  // the app on a splash screen. If this fails the app still opens, and the
+  // screens that need a session say so.
+  useEffect(() => {
+    let cancelled = false;
+    void ensureSession().then((ok) => {
+      if (!cancelled) setOnline(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Never hang on boot. If a font CDN or a cold cache is being slow, show the
   // app in the fallback face rather than holding a splash screen forever.
@@ -64,5 +82,5 @@ export function useAppBoot(): AppBoot {
       ? "Boot timed out; running with system fonts."
       : null;
 
-  return { ready, degraded };
+  return { ready, degraded, online };
 }

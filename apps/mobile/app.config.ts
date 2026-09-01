@@ -3,6 +3,13 @@ import type { ExpoConfig } from "expo/config";
 // APP_ENV is injected by the EAS build profile (see eas.json) or the shell.
 const APP_ENV = (process.env.APP_ENV ?? "development") as "development" | "staging" | "production";
 
+const API_URL: Record<typeof APP_ENV, string> = {
+  // Dev points at localhost so the app talks to a locally-run apps/web.
+  development: process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000",
+  staging: "https://beermacs-app.vercel.app",
+  production: "https://beermacs-app.vercel.app",
+};
+
 const config: ExpoConfig = {
   name: APP_ENV === "production" ? "Beermacs" : `Beermacs (${APP_ENV})`,
   slug: "beermacs",
@@ -37,6 +44,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-font",
+    "expo-secure-store",
     [
       "expo-splash-screen",
       {
@@ -48,6 +56,7 @@ const config: ExpoConfig = {
     ],
   ],
   extra: {
+    apiUrl: API_URL[APP_ENV],
     appEnv: APP_ENV,
   },
   experiments: {

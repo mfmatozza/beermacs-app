@@ -50,20 +50,37 @@ enum Role {
 /// another — roles are per-venue (see VenueMembership), never global. The bar
 /// owner plays too.
 model User {
-  id            String    @id @default(cuid())
-  /// Nullable: players join anonymously with a display name and may never
-  /// give us contact details. Auth identifiers are added only if they want
-  /// their record to follow them between nights.
-  phone         String?   @unique
-  phoneVerified Boolean   @default(false)
+  id String @id @default(cuid())
+
+  /// Better Auth writes `name`, `email`, `emailVerified` and `image` by these
+  /// exact names, so they are not renamed. `displayName` is what the app shows
+  /// and what a player types when joining; it defaults from `name`.
+  name          String?
   email         String?   @unique
   emailVerified Boolean   @default(false)
-  displayName   String
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
 
+  /// Nullable: players join anonymously and may never give us contact details.
+  /// Auth identifiers are added only if they want their record to follow them
+  /// between nights.
+  phone         String?  @unique
+  phoneVerified Boolean  @default(false)
+  /// Defaulted, not required: an anonymous session is created the moment the
+  /// app opens, before the player has typed anything. The join endpoint
+  /// overwrites this with the name they actually enter.
+  displayName   String   @default("Player")
+
+  /// Set by Better Auth's anonymous plugin. An anonymous user is a real row
+  /// with a real session — team membership and push notifications work exactly
+  /// the same — it just has no way to sign in again from another device.
+  isAnonymous Boolean @default(false)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  sessions      Session[]
+  accounts      Account[]
   memberships   VenueMembership[]
   teamMembers   TeamMember[]
   devices       Device[]
@@ -73,6 +90,59 @@ model User {
   authoredNews  News[]            @relation("NewsAuthor")
 
   @@index([deletedAt])
+}
+
+/// Better Auth session. Managed entirely by the library — do not write to it.
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Better Auth credential/provider link. Holds the staff password hash.
+///
+/// `issuer` arrived in Better Auth 1.7, which scopes account identity by it.
+/// The exact field list here came from calling `getAuthTables()` with our own
+/// plugin set rather than from copying another project's schema — that is what
+/// the missing column was.
+model Account {
+  id                    String    @id
+  issuer                String
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+/// Better Auth short-lived tokens (email verification, password reset).
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
 }
 
 // ─── Tenancy ────────────────────────────────────────────────────────────────

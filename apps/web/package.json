@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@beermacs/db": "*",
     "@beermacs/shared": "*",
+    "better-auth": "^1.7.2",
     "next": "^16.2.10",
     "react": "19.2.3",
     "react-dom": "19.2.3",

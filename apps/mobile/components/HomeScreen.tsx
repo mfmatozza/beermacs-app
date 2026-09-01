@@ -1,6 +1,7 @@
 import { isCompleteJoinCode, joinCodeLength, normaliseJoinCode, sideOf } from "@beermacs/shared";
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ApiError, api } from "../lib/api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   matches,
@@ -31,9 +32,40 @@ import VenueList from "./VenueList";
  * live here; §4 puts them on the Bracket tab. Home answers "what do I do next",
  * not "what is the state of the tournament".
  */
+/** What went wrong, in words a player can act on. */
+function joinErrorMessage(code: string): string {
+  switch (code) {
+    case "unknown_code":
+      return "No tournament with that code. Check the table tent.";
+    case "registration_not_open":
+      return "That tournament hasn't opened for registration yet.";
+    case "tournament_finished":
+      return "That tournament has already finished.";
+    case "not_signed_in":
+      return "Couldn't reach the bar's tournament. Check your connection.";
+    default:
+      return "Couldn't join just now. Try again in a moment.";
+  }
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [code, setCode] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  const join = useCallback(async () => {
+    setJoining(true);
+    setJoinError(null);
+    try {
+      await api.join({ code, displayName: viewer.displayName });
+      setCode("");
+    } catch (e) {
+      setJoinError(joinErrorMessage(e instanceof ApiError ? e.code : "unknown"));
+    } finally {
+      setJoining(false);
+    }
+  }, [code]);
 
   // Null venue is the browse state. Wired to the session in phase 1.
   const checkedIn = venue !== null;
@@ -126,7 +158,13 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <JoinBox code={code} onChange={setCode} onSubmit={() => {}} />
+          <JoinBox
+            code={code}
+            onChange={setCode}
+            onSubmit={join}
+            busy={joining}
+            error={joinError}
+          />
 
           <View className="gap-2">
             <SectionLabel>Playing tonight</SectionLabel>
@@ -159,10 +197,14 @@ function JoinBox({
   code,
   onChange,
   onSubmit,
+  busy,
+  error,
 }: {
   code: string;
   onChange: (v: string) => void;
   onSubmit: () => void;
+  busy: boolean;
+  error: string | null;
 }) {
   const complete = isCompleteJoinCode(code);
   return (
