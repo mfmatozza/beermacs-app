@@ -1,0 +1,16 @@
+# Exclude workspaces the mobile app doesn't depend on, so `eas build` for
+# apps/mobile doesn't have to install apps/web's deps. Nothing in the
+# workspace graph depends on @beermacs/web besides itself.
+apps/web
+
+# Native dirs are generated (CNG) — building a local dev client with
+# `expo run:ios` creates apps/mobile/ios. Uploading that to EAS makes the build
+# reuse a machine-specific project (absolute local paths get baked into its
+# build scripts), which breaks the archive step. Let EAS prebuild these itself,
+# every time.
+apps/mobile/ios
+apps/mobile/android
+
+# Never let a local dev-only env file leak into a cloud build (use .env.local
+# instead, which Expo's own convention already keeps out of EAS Build).
+apps/mobile/.env

@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Beermacs design system (web).
+ * Palette mirrors the mobile app (apps/mobile/tailwind.config.js) so the site
+ * and the app read as the same product. `beer-500` is the brand gold carried
+ * over from the original beermacs.com stylesheet, hsl(40 100% 48%).
+ *
+ * The app is dark because it is used in a bar at 11pm. The site is light
+ * because it is read by a bar owner at their desk. Same palette, opposite
+ * ground — the gold has to earn its place against white, so it is used on
+ * type and borders rather than poured over the page.
+ * ──────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-beer-100: #fff0ce;
+  --color-beer-200: #ffde95;
+  --color-beer-400: #ffb12a;
+  --color-beer-500: #f5a300; /* brand gold */
+  --color-beer-600: #d07f00;
+  --color-beer-700: #a15d00; /* the readable one on white */
+  --color-beer-800: #6e3d00;
+
+  --color-stout-700: #1c1915;
+  --color-stout-800: #151310;
+  --color-stout-900: #0a0908;
+
+  --color-live: #3d7a52;
+  --color-dispute: #a83526;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+html {
+  /* Warm-tinted backdrop so cards lift off it without needing a shadow. */
+  background: linear-gradient(180deg, #faf8f4 0%, #ffffff 340px);
+  background-attachment: fixed;
+}
+
+body {
+  @apply text-stout-800 antialiased;
+  font-family: var(--font-sans);
+}
+
+/* Brand focus ring across the site. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-beer-700);
+  outline-offset: 2px;
+  border-radius: 6px;
+}

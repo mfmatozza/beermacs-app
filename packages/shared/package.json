@@ -1,0 +1,27 @@
+{
+  "name": "@beermacs/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tournament rules, Zod schemas and inferred types shared across Beermacs apps",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schemas": "./src/schemas/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@beermacs/config": "*",
+    "eslint": "^10.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
+}

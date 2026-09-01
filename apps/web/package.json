@@ -1,0 +1,32 @@
+{
+  "name": "@beermacs/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Beermacs marketing site + venue dashboard (Next.js App Router, hosted on Vercel)",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@beermacs/shared": "*",
+    "next": "^16.2.10",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@beermacs/config": "*",
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "~19.2.2",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^10.7.0",
+    "eslint-config-next": "^16.2.10",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^5.9.3"
+  }
+}
