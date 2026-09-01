@@ -50,11 +50,18 @@ module.exports = {
         notice: { DEFAULT: "#4F8DA6", wash: "#16292F" },
       },
       fontFamily: {
-        // Must match the keys passed to `useFonts` in lib/use-app-boot.ts.
+        // Values must match the keys passed to `useFonts` in lib/use-app-boot.ts.
+        //
+        // The KEYS must not collide with Tailwind's built-in font-weight
+        // utilities. Naming these `medium` and `bold` generated two rules for
+        // the same class — `.font-bold { font-family: DMSans_700Bold }` from
+        // here AND `.font-bold { font-weight: 700 }` from the default weight
+        // scale. iOS cannot resolve a custom family together with a weight, so
+        // it silently fell back to the system font. Hence `sans-med`/`sans-bold`.
         display: ["BebasNeue_400Regular"],
         sans: ["DMSans_400Regular"],
-        medium: ["DMSans_500Medium"],
-        bold: ["DMSans_700Bold"],
+        "sans-med": ["DMSans_500Medium"],
+        "sans-bold": ["DMSans_700Bold"],
       },
     },
   },

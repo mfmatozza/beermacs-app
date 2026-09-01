@@ -28,7 +28,7 @@ export default function NextUpCard({
         >
           {live ? <View className="h-1.5 w-1.5 rounded-full bg-live" /> : null}
           <Text
-            className={`font-medium text-[11px] uppercase tracking-[1.1px] ${
+            className={`font-sans-med text-[11px] uppercase tracking-[1.1px] ${
               live ? "text-live" : "text-notice"
             }`}
           >
@@ -36,7 +36,7 @@ export default function NextUpCard({
           </Text>
         </View>
         <View className="flex-1" />
-        <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-dim">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-dim">
           {`Round ${match.round}`}
         </Text>
       </View>
@@ -45,16 +45,19 @@ export default function NextUpCard({
           it is what someone squints at from across a loud room. */}
       {tableLabel ? (
         <View className="flex-row items-end gap-4">
-          <View className="shrink">
-            <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-beer-400">
+          <View>
+            <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-400">
               Head to
             </Text>
             <Text className="font-display text-5xl leading-[48px] tracking-[1.2px] text-cream">
               {tableLabel.toUpperCase()}
             </Text>
           </View>
-          <View className="shrink pb-2">
-            <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-dim">
+          {/* flex-1, not shrink: `shrink` alone lets the Text report its full
+              intrinsic width and run off the card — a long team name has to be
+              given a bounded box before numberOfLines can truncate it. */}
+          <View className="flex-1 pb-2">
+            <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-dim">
               vs
             </Text>
             <Text
@@ -67,7 +70,7 @@ export default function NextUpCard({
         </View>
       ) : (
         <View className="gap-0.5">
-          <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-dim">
+          <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-dim">
             Waiting for a table — vs
           </Text>
           <Text

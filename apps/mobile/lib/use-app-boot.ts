@@ -51,6 +51,13 @@ export function useAppBoot(): AppBoot {
     if (ready) void SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
 
+  // Surface a failed font load in development. Silent fallback to the system
+  // face is exactly the bug class that shipped the wrong typeface for two
+  // builds without anything in the logs.
+  useEffect(() => {
+    if (__DEV__ && fontError) console.warn("[boot] font load failed:", fontError);
+  }, [fontError]);
+
   const degraded = fontError
     ? `Fonts failed to load: ${fontError.message}`
     : timedOut && !fontsLoaded

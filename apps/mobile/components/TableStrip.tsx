@@ -38,7 +38,7 @@ export default function TableStrip({
               }`}
             >
               <Text
-                className={`font-medium text-[11px] uppercase tracking-[1.1px] ${
+                className={`font-sans-med text-[11px] uppercase tracking-[1.1px] ${
                   closed ? "text-cream-faint" : playing ? "text-live" : "text-beer-500"
                 }`}
                 numberOfLines={1}

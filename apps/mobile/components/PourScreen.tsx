@@ -79,13 +79,13 @@ export default function PourScreen({ ready, onDone }: { ready: boolean; onDone: 
         >
           BEERMACS
         </Text>
-        <Text className="mt-2 text-center font-medium text-[11px] uppercase tracking-[1.1px] text-foam-300">
+        <Text className="mt-2 text-center font-sans-med text-[11px] uppercase tracking-[1.1px] text-foam-300">
           Tournament night
         </Text>
       </View>
 
       <View className="absolute inset-x-0 bottom-12 items-center" pointerEvents="none">
-        <Text className="font-medium text-sm tabular-nums text-foam-300">{`${percent}%`}</Text>
+        <Text className="font-sans-med text-sm tabular-nums text-foam-300">{`${percent}%`}</Text>
       </View>
     </Animated.View>
   );

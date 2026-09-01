@@ -63,7 +63,7 @@ export default function HomeScreen() {
           <View className="flex-1" />
           <View className="flex-row items-center gap-1.5 rounded-full border border-live bg-live-wash px-2.5 py-1">
             <View className="h-1.5 w-1.5 rounded-full bg-live" />
-            <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-live">
+            <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-live">
               Live
             </Text>
           </View>
@@ -96,7 +96,7 @@ export default function HomeScreen() {
 
       {/* ── tonight ─────────────────────────────────────────────────────── */}
       <View className="gap-2">
-        <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
           Tonight
         </Text>
         <View className="gap-4 rounded-2xl border border-stout-600 bg-stout-700 p-4">
@@ -115,10 +115,10 @@ export default function HomeScreen() {
               </Text>
             </View>
             <View className="items-end gap-0.5">
-              <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+              <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
                 Join code
               </Text>
-              <Text className="font-bold text-2xl tabular-nums tracking-[6px] text-beer-500">
+              <Text className="font-sans-bold text-2xl tabular-nums tracking-[6px] text-beer-500">
                 {tournament.joinCode}
               </Text>
             </View>
@@ -136,10 +136,12 @@ export default function HomeScreen() {
       {/* ── tables ──────────────────────────────────────────────────────── */}
       <View className="gap-2">
         <View className="flex-row items-center gap-2">
-          <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+          <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
             Tables
           </Text>
-          <Text className="font-medium text-sm tabular-nums text-cream-faint">{tables.length}</Text>
+          <Text className="font-sans-med text-sm tabular-nums text-cream-faint">
+            {tables.length}
+          </Text>
         </View>
         <TableStrip tables={tables} matches={matches} labelFor={describeMatch} />
       </View>
@@ -147,15 +149,15 @@ export default function HomeScreen() {
       {/* ── the queue ───────────────────────────────────────────────────── */}
       <View className="gap-2">
         <View className="flex-row items-center gap-2">
-          <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+          <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
             Up next
           </Text>
-          <Text className="font-medium text-sm tabular-nums text-cream-faint">
+          <Text className="font-sans-med text-sm tabular-nums text-cream-faint">
             {derived.queue.length}
           </Text>
           <View className="flex-1" />
           {viewer.isStaff && derived.nextAssignments > 0 ? (
-            <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-beer-500">
+            <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-500">
               {`${derived.nextAssignments} ready to send`}
             </Text>
           ) : null}
@@ -191,7 +193,7 @@ function Stat({ value, label, tone }: { value: number; label: string; tone: stri
       <Text className={`font-display text-4xl leading-10 tracking-[1.2px] ${tone}`}>
         {String(value)}
       </Text>
-      <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+      <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
         {label}
       </Text>
     </View>

@@ -27,14 +27,14 @@ export default function QueueList({
         <Fragment key={e.matchId}>
           {i > 0 ? <View className="h-px bg-stout-600" /> : null}
           <View className="flex-row items-center gap-3 py-3">
-            <Text className="font-medium text-sm tabular-nums text-cream-faint">
+            <Text className="font-sans-med text-sm tabular-nums text-cream-faint">
               {String(i + 1).padStart(2, "0")}
             </Text>
-            <Text className="shrink font-medium text-[15px] text-cream" numberOfLines={1}>
+            <Text className="shrink font-sans-med text-[15px] text-cream" numberOfLines={1}>
               {describe(e.matchId)}
             </Text>
             <View className="flex-1" />
-            <Text className="font-medium text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+            <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
               {`R${e.round}`}
             </Text>
           </View>

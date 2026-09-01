@@ -21,6 +21,19 @@ export default function RootLayout() {
   const [poured, setPoured] = useState(false);
   const onDone = useCallback(() => setPoured(true), []);
 
+  // Nothing that draws text may mount before the fonts are registered.
+  //
+  // React Native resolves a Text's font once, at first paint. If the family
+  // isn't registered yet it silently falls back to the system face and never
+  // re-resolves — a later re-render produces a structurally identical style
+  // object, so no update is sent to the native view and the fallback sticks for
+  // the life of the screen. It looks like the font "didn't load" when in fact it
+  // loaded 80ms too late.
+  //
+  // Returning null holds the tree until then. The native splash is still up, so
+  // this is invisible; the pour's own minimum on-screen time covers the rest.
+  if (!ready) return null;
+
   return (
     <GestureHandlerRootView className="flex-1 bg-stout-900">
       <SafeAreaProvider>
