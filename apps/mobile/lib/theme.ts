@@ -11,12 +11,10 @@
  * bar's height, and every scrolling screen has to pad its content by the same
  * amount or the last row sits underneath it.
  *
- * 68 rather than 58 so the raised centre button fits INSIDE the bar. A button
- * that overhangs the bar looks better and cannot be tapped — iOS does not
- * deliver touches to a subview outside its superview's bounds, and
- * `overflow: "visible"` affects drawing only, not hit-testing.
+ * The raised centre button is NOT inside the bar (see CenterTabButton), so this
+ * is just the bar's own height.
  */
-export const TAB_BAR_HEIGHT = 68;
+export const TAB_BAR_HEIGHT = 60;
 
 /** Raw hex, for the few APIs that take a colour value rather than a class. */
 export const raw = {
