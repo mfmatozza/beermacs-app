@@ -37,8 +37,13 @@ export async function ensureSession(): Promise<boolean> {
     const existing = await authClient.getSession();
     if (existing.data?.session) return true;
     const created = await authClient.signIn.anonymous();
+    if (__DEV__ && created.error) console.warn("[auth] anonymous sign-in failed:", created.error);
     return !created.error;
-  } catch {
+  } catch (e) {
+    // A missing native module surfaces here as a bare "Cannot find module",
+    // which is otherwise indistinguishable from being offline — @better-auth/expo
+    // marks its expo-* peers optional but needs expo-network at runtime.
+    if (__DEV__) console.warn("[auth] ensureSession threw:", String(e));
     return false;
   }
 }
