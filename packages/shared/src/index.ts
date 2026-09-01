@@ -19,4 +19,5 @@ export * from "./bracket";
 export * from "./approval";
 export * from "./dispatcher";
 export * from "./join-code";
+export * from "./geo";
 export * from "./schemas";

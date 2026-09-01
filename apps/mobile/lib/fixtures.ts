@@ -20,13 +20,131 @@ export interface Venue {
   readonly id: string;
   readonly name: string;
   readonly city: string;
+  readonly latitude: number;
+  readonly longitude: number;
+  /// What a browsing player needs to decide whether to walk over.
+  readonly tournamentName: string | null;
+  readonly teamsRegistered: number;
+  readonly startsAt: string | null;
+  readonly isLive: boolean;
 }
 
+/** The venue this device is checked into. Null puts Home in browse mode. */
 export const venue: Venue = {
   id: "v-macs",
   name: "Mac's Tap Room",
   city: "Milano",
+  latitude: 45.4508,
+  longitude: 9.1745,
+  tournamentName: "Friday Night Cups",
+  teamsRegistered: 9,
+  startsAt: null,
+  isLive: true,
 };
+
+/**
+ * Venues running a Beermacs tournament right now — the browse state, for
+ * someone with no active registration. §5 asks for "a map or list"; this is the
+ * list. A real map means a native maps SDK, which is a heavy dependency to add
+ * before anyone has asked to see one — see docs/DECISIONS.md D6.
+ */
+export const nearbyVenues: readonly Venue[] = [
+  {
+    id: "v-macs",
+    name: "Mac's Tap Room",
+    city: "Milano",
+    latitude: 45.4508,
+    longitude: 9.1745,
+    tournamentName: "Friday Night Cups",
+    teamsRegistered: 9,
+    startsAt: null,
+    isLive: true,
+  },
+  {
+    id: "v-baraonda",
+    name: "Baraonda",
+    city: "Milano",
+    latitude: 45.4779,
+    longitude: 9.2042,
+    tournamentName: "Coppa Isola",
+    teamsRegistered: 6,
+    startsAt: "2026-09-01T20:30:00.000Z",
+    isLive: false,
+  },
+  {
+    id: "v-tortona",
+    name: "Bar Tortona",
+    city: "Milano",
+    latitude: 45.4519,
+    longitude: 9.1631,
+    tournamentName: "Thursday Pong",
+    teamsRegistered: 12,
+    startsAt: "2026-09-03T19:00:00.000Z",
+    isLive: false,
+  },
+  {
+    id: "v-sanmarco",
+    name: "Circolo San Marco",
+    city: "Milano",
+    latitude: 45.4756,
+    longitude: 9.1866,
+    tournamentName: null,
+    teamsRegistered: 0,
+    startsAt: null,
+    isLive: false,
+  },
+];
+
+/** Roughly where the phone is. Replaced by expo-location when the map lands. */
+export const viewerLocation = { latitude: 45.4642, longitude: 9.19 };
+
+// ─── News ───────────────────────────────────────────────────────────────────
+
+export interface NewsItem {
+  readonly id: string;
+  readonly venueId: string;
+  readonly venueName: string;
+  readonly title: string;
+  readonly body: string;
+  readonly publishedAt: string;
+  /// Whether publishing also pushed it to the venue's players (§8).
+  readonly pushed: boolean;
+}
+
+/**
+ * The venue announcement feed. §5 calls this the primary advertising surface,
+ * which is why it sits on Home rather than behind a tab: it is the thing a bar
+ * is paying for.
+ */
+export const news: readonly NewsItem[] = [
+  {
+    id: "n-1",
+    venueId: "v-macs",
+    venueName: "Mac's Tap Room",
+    title: "Round 2 is underway",
+    body: "Four teams left. Semifinals start as soon as Table 3 frees up — winners get the tab covered.",
+    publishedAt: "2026-09-01T21:40:00.000Z",
+    pushed: true,
+  },
+  {
+    id: "n-2",
+    venueId: "v-macs",
+    venueName: "Mac's Tap Room",
+    title: "Next Friday: doubles only",
+    body: "Same time, two-player teams, 16 spots. Registration opens Wednesday at noon in the app.",
+    publishedAt: "2026-09-01T18:05:00.000Z",
+    pushed: true,
+  },
+  {
+    id: "n-3",
+    venueId: "v-macs",
+    venueName: "Mac's Tap Room",
+    title: "House rule change",
+    body: "Re-racks are now once per game, called before the throw. Bounce shots still count double.",
+    publishedAt: "2026-08-30T16:20:00.000Z",
+    pushed: false,
+  },
+];
 
 export const tournament: Tournament = {
   id: "t-friday",

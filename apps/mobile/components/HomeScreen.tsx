@@ -1,53 +1,52 @@
-import {
-  buildQueue,
-  luckyLoserPool,
-  planDispatch,
-  roundLabel,
-  sideOf,
-  tableUtilisation,
-  type Match,
-} from "@beermacs/shared";
-import { useMemo } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { isCompleteJoinCode, joinCodeLength, normaliseJoinCode, sideOf } from "@beermacs/shared";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { matches, tables, teamName, tournament, venue, viewer } from "../lib/fixtures";
-import { TAB_BAR_HEIGHT } from "../lib/theme";
+import {
+  matches,
+  nearbyVenues,
+  news,
+  tables,
+  teamName,
+  tournament,
+  venue,
+  viewer,
+  viewerLocation,
+} from "../lib/fixtures";
+import { raw, TAB_BAR_HEIGHT } from "../lib/theme";
+import NewsFeed from "./NewsFeed";
 import NextUpCard from "./NextUpCard";
-import QueueList from "./QueueList";
-import TableStrip from "./TableStrip";
+import VenueList from "./VenueList";
 
 /**
- * Home is "what do I do next", not a dashboard.
+ * Home, per §5 of the brief. Two states, decided by whether this device has an
+ * active registration:
  *
- * Every derived number here — the queue, the table counts, the lucky-loser pool
- * — comes from a pure function in @beermacs/shared, called on the same data the
- * server will call it on. No screen computes bracket state of its own, which is
- * how the old app ended up with three different ideas of "round complete".
+ *   CHECKED IN  — the venue front and centre, the active/upcoming tournament
+ *                 card, and that venue's announcements. Reads like the old
+ *                 single-bar beermacs.com, which is the point.
+ *   BROWSING    — venues running Beermacs near you, plus a join code box.
+ *
+ * The bracket, the table strip and the dispatcher queue deliberately do NOT
+ * live here; §4 puts them on the Bracket tab. Home answers "what do I do next",
+ * not "what is the state of the tournament".
  */
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const [code, setCode] = useState("");
 
-  const derived = useMemo(() => {
-    const myMatch = matches.find(
-      (m) => m.state !== "confirmed" && sideOf(m, viewer.teamId) !== null
-    );
-    const plan = planDispatch(matches, tables);
-    return {
-      myMatch,
-      queue: buildQueue(matches, []),
-      utilisation: tableUtilisation(matches, tables),
-      pool: luckyLoserPool(matches),
-      nextAssignments: plan.assignments.length,
-      roundMatches: matches.filter((m) => m.round === tournament.currentRound).length,
-    };
-  }, []);
+  // Null venue is the browse state. Wired to the session in phase 1.
+  const checkedIn = venue !== null;
 
-  const describeMatch = (m: Match) => `${teamName(m.home.teamId)} vs ${teamName(m.away.teamId)}`;
+  const myMatch = useMemo(
+    () => matches.find((m) => m.state !== "confirmed" && sideOf(m, viewer.teamId) !== null),
+    []
+  );
 
-  const opponentOf = (m: Match) =>
-    teamName(sideOf(m, viewer.teamId) === "home" ? m.away.teamId : m.home.teamId);
-
-  const tableLabelOf = (m: Match) => tables.find((t) => t.id === m.tableId)?.label ?? null;
+  const venueNews = useMemo(
+    () => (checkedIn ? news.filter((n) => n.venueId === venue.id) : news.slice(0, 2)),
+    [checkedIn]
+  );
 
   return (
     <ScrollView
@@ -61,176 +60,141 @@ export default function HomeScreen() {
       showsVerticalScrollIndicator={false}
       alwaysBounceHorizontal={false}
     >
-      {/* ── masthead ────────────────────────────────────────────────────── */}
-      <View className="gap-1">
-        <View className="flex-row items-center gap-2">
-          <Text className="font-display text-2xl tracking-[0.9px] text-beer-500">BEERMACS</Text>
-          <View className="flex-1" />
-          <View className="flex-row items-center gap-1.5 rounded-full border border-live bg-live-wash px-2.5 py-1">
-            <View className="h-1.5 w-1.5 rounded-full bg-live" />
-            <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-live">
-              Live
-            </Text>
-          </View>
-        </View>
-        <Text className="font-sans text-[13px] text-cream-dim">
-          {`${venue.name} · ${venue.city}`}
-        </Text>
-      </View>
-
-      {/* ── the only thing that matters ─────────────────────────────────── */}
-      {derived.myMatch ? (
-        <NextUpCard
-          match={derived.myMatch}
-          tableLabel={tableLabelOf(derived.myMatch)}
-          opponent={opponentOf(derived.myMatch)}
-          onReport={() => {}}
-        />
-      ) : (
-        <View className="gap-2 rounded-2xl border border-stout-600 bg-stout-700 p-4">
-          <Text className="font-display text-xl uppercase tracking-[0.8px] text-cream">
-            You&rsquo;re not in a match
-          </Text>
-          <Text className="font-sans text-[13px] text-cream-dim">
-            {derived.pool.some((p) => p.teamId === viewer.teamId)
-              ? "You're in the lucky-loser pool — staff may draw you back in."
-              : "Sit tight. The bracket updates live."}
-          </Text>
-        </View>
-      )}
-
-      {/* ── tonight ─────────────────────────────────────────────────────── */}
-      <View className="gap-2">
-        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-          Tonight
-        </Text>
-        <View className="gap-4 rounded-2xl border border-stout-600 bg-stout-700 p-4">
-          <View className="flex-row gap-3">
-            <View className="flex-1 gap-0.5">
+      {checkedIn ? (
+        <>
+          {/* ── the venue, prominently ────────────────────────────────── */}
+          <View className="gap-1">
+            <View className="flex-row items-center gap-2">
               <Text
-                className="font-display text-xl uppercase tracking-[0.8px] text-cream"
+                className="shrink font-display text-3xl uppercase tracking-[1.2px] text-cream"
                 numberOfLines={1}
               >
-                {tournament.name}
+                {venue.name}
+              </Text>
+              {venue.isLive ? (
+                <View className="flex-row items-center gap-1.5 rounded-full border border-live bg-live-wash px-2.5 py-1">
+                  <View className="h-1.5 w-1.5 rounded-full bg-live" />
+                  <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-live">
+                    Live
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text className="font-sans text-[13px] text-cream-dim">
+              {`${tournament.name} · ${venue.teamsRegistered} teams · ${venue.city}`}
+            </Text>
+          </View>
+
+          {/* ── your match, or your status ────────────────────────────── */}
+          {myMatch ? (
+            <NextUpCard
+              match={myMatch}
+              tableLabel={tables.find((t) => t.id === myMatch.tableId)?.label ?? null}
+              opponent={teamName(
+                sideOf(myMatch, viewer.teamId) === "home"
+                  ? myMatch.away.teamId
+                  : myMatch.home.teamId
+              )}
+              onReport={() => {}}
+            />
+          ) : (
+            <View className="gap-2 rounded-2xl border border-stout-600 bg-stout-700 p-4">
+              <Text className="font-display text-xl uppercase tracking-[0.8px] text-cream">
+                You&rsquo;re not in a match
               </Text>
               <Text className="font-sans text-[13px] text-cream-dim">
-                {`${roundLabel(derived.roundMatches, tournament.currentRound)} · ${
-                  tournament.format.cupsToWin
-                } cups to win`}
+                Sit tight — we&rsquo;ll buzz your phone when a table frees up.
               </Text>
             </View>
-            <View className="items-end gap-0.5">
-              <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-                Join code
-              </Text>
-              <Text className="font-sans-bold text-2xl tabular-nums tracking-[6px] text-beer-500">
-                {tournament.joinCode}
-              </Text>
-            </View>
+          )}
+
+          {/* ── the announcement feed: what the bar is paying for ─────── */}
+          <View className="gap-2">
+            <SectionLabel>From the bar</SectionLabel>
+            <NewsFeed items={venueNews} />
           </View>
-
-          <View className="flex-row gap-6">
-            <Stat value={derived.utilisation.inPlay} label="In play" tone="text-live" />
-            <Stat value={derived.utilisation.open} label="Free" tone="text-beer-500" />
-            <Stat value={derived.queue.length} label="Waiting" tone="text-cream" />
-            <Stat value={derived.pool.length} label="Lucky pool" tone="text-cream-dim" />
-          </View>
-        </View>
-      </View>
-
-      {/* ── tables ──────────────────────────────────────────────────────── */}
-      <View className="gap-2">
-        <View className="flex-row items-center gap-2">
-          <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-            Tables
-          </Text>
-          <Text className="font-sans-med text-sm tabular-nums text-cream-faint">
-            {tables.length}
-          </Text>
-        </View>
-        <TableStrip tables={tables} matches={matches} labelFor={describeMatch} />
-      </View>
-
-      {/* ── the queue ───────────────────────────────────────────────────── */}
-      <View className="gap-2">
-        <View className="flex-row items-center gap-2">
-          <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-            Up next
-          </Text>
-          <Text className="font-sans-med text-sm tabular-nums text-cream-faint">
-            {derived.queue.length}
-          </Text>
-          <View className="flex-1" />
-          {viewer.isStaff && derived.nextAssignments > 0 ? (
-            <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-500">
-              {`${derived.nextAssignments} ready to send`}
+        </>
+      ) : (
+        <>
+          {/* ── browse: no active registration ───────────────────────── */}
+          <View className="gap-1">
+            <Text className="font-display text-3xl uppercase tracking-[1.2px] text-beer-500">
+              Beermacs
             </Text>
-          ) : null}
-        </View>
-        <View className="rounded-2xl border border-stout-600 bg-stout-850 px-3">
-          <QueueList
-            entries={derived.queue}
-            describe={(id) => {
-              const m = matches.find((x) => x.id === id);
-              return m ? describeMatch(m) : "Unknown match";
-            }}
-          />
-        </View>
-      </View>
+            <Text className="font-sans text-[13px] text-cream-dim">
+              Find a bar running a tournament tonight, or type the code off the table.
+            </Text>
+          </View>
 
-      {/* ── actions ─────────────────────────────────────────────────────── */}
-      <View className="gap-2">
-        <Action label="Open the bracket" variant="secondary" onPress={() => {}} />
-        {viewer.isStaff ? <Action label="Run the round" onPress={() => {}} /> : null}
-      </View>
+          <JoinBox code={code} onChange={setCode} onSubmit={() => {}} />
 
-      <Text className="text-center font-sans text-[13px] text-cream-faint">
-        Phase 0 build · screens read from typed fixtures until the API lands
-      </Text>
+          <View className="gap-2">
+            <SectionLabel>Playing tonight</SectionLabel>
+            <VenueList venues={nearbyVenues} from={viewerLocation} onJoin={() => {}} />
+          </View>
+
+          <View className="gap-2">
+            <SectionLabel>Latest</SectionLabel>
+            <NewsFeed items={venueNews} />
+          </View>
+        </>
+      )}
     </ScrollView>
   );
 }
 
-/** A number and its name. Digits are tabular so the row does not jitter. */
-function Stat({ value, label, tone }: { value: number; label: string; tone: string }) {
+function SectionLabel({ children }: { children: string }) {
   return (
-    <View className="min-w-[48px] gap-0.5">
-      <Text className={`font-display text-4xl leading-10 tracking-[1.2px] ${tone}`}>
-        {String(value)}
-      </Text>
-      <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-        {label}
-      </Text>
-    </View>
+    <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+      {children}
+    </Text>
   );
 }
 
-function Action({
-  label,
-  onPress,
-  variant = "primary",
+/**
+ * Join by code. Normalises as you type — Crockford Base32 folds O→0, I/L→1 and
+ * U→V — so a code read aloud across a loud room still lands.
+ */
+function JoinBox({
+  code,
+  onChange,
+  onSubmit,
 }: {
-  label: string;
-  onPress: () => void;
-  variant?: "primary" | "secondary";
+  code: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
 }) {
-  const primary = variant === "primary";
+  const complete = isCompleteJoinCode(code);
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      className={`min-h-[48px] items-center justify-center rounded-lg border px-6 active:opacity-70 ${
-        primary ? "border-beer-500 bg-beer-500" : "border-stout-500 bg-transparent"
-      }`}
-    >
-      <Text
-        className={`font-display text-xl uppercase tracking-[0.8px] ${
-          primary ? "text-stout-900" : "text-cream"
+    <View className="gap-2 rounded-2xl border border-beer-500/40 bg-beer-500/10 p-4">
+      <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-400">
+        Join with a code
+      </Text>
+      <TextInput
+        value={code}
+        onChangeText={(v) => onChange(normaliseJoinCode(v))}
+        placeholder={"·".repeat(joinCodeLength)}
+        placeholderTextColor={raw.foamShade + "55"}
+        autoCapitalize="characters"
+        autoCorrect={false}
+        maxLength={joinCodeLength}
+        returnKeyType="go"
+        onSubmitEditing={onSubmit}
+        accessibilityLabel="Tournament join code"
+        className="rounded-lg border border-stout-500 bg-stout-900 px-4 py-3 text-center font-sans-bold text-2xl tabular-nums tracking-[8px] text-cream"
+      />
+      <Pressable
+        onPress={onSubmit}
+        disabled={!complete}
+        accessibilityRole="button"
+        accessibilityLabel="Join tournament"
+        accessibilityState={{ disabled: !complete }}
+        className={`min-h-[48px] items-center justify-center rounded-lg bg-beer-500 px-6 active:opacity-70 ${
+          complete ? "" : "opacity-40"
         }`}
       >
-        {label}
-      </Text>
-    </Pressable>
+        <Text className="font-display text-xl uppercase tracking-[0.8px] text-stout-900">Join</Text>
+      </Pressable>
+    </View>
   );
 }

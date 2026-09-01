@@ -75,3 +75,22 @@ The brief's §2 asks for `react-navigation` with bottom tabs and native stacks.
 `expo-router` is a file-based router built directly on react-navigation and is
 what astra uses, so this is the same library reached through a different API.
 Not treated as a conflict.
+
+---
+
+## D6 — Venue list, not a venue map
+
+**Chosen:** a distance-sorted list of venues running a tournament.
+**Over:** the map §5 also offers.
+
+A map means a native maps SDK — `react-native-maps` or Mapbox, both heavy, and
+Mapbox additionally needs a secret download token on every build machine (astra
+carries that cost and it is not free of friction). The list answers more of what
+a browsing player actually needs anyway: how far, whether it has started, and
+how many teams are already in. A map answers only the first.
+
+`Venue` already carries `latitude`/`longitude`, so the data is there when the
+map is wanted.
+
+**Revisit when:** venues get dense enough in one city that "which of these four
+is nearest to me right now" stops being obvious from a sorted list.
