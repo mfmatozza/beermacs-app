@@ -16,6 +16,7 @@
     "@beermacs/shared": "*",
     "@expo-google-fonts/bebas-neue": "^0.4.1",
     "@expo-google-fonts/dm-sans": "^0.4.2",
+    "@expo/vector-icons": "^15.0.2",
     "@shopify/react-native-skia": "2.6.2",
     "expo": "^57.0.18",
     "expo-constants": "~57.0.16",

@@ -11,6 +11,7 @@ import { useMemo } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { matches, tables, teamName, tournament, venue, viewer } from "../lib/fixtures";
+import { TAB_BAR_HEIGHT } from "../lib/theme";
 import NextUpCard from "./NextUpCard";
 import QueueList from "./QueueList";
 import TableStrip from "./TableStrip";
@@ -51,7 +52,11 @@ export default function HomeScreen() {
   return (
     <ScrollView
       className="flex-1 bg-stout-900"
-      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 32 }}
+      contentContainerStyle={{
+        paddingTop: insets.top + 12,
+        // Clear the tab bar, which floats over the scroll view.
+        paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
+      }}
       contentContainerClassName="gap-6 px-4"
       showsVerticalScrollIndicator={false}
       alwaysBounceHorizontal={false}

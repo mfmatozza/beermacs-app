@@ -4,12 +4,28 @@
 // strings. What's left is what JavaScript has to hand to something that isn't
 // a React Native style: Skia's canvas, the status bar, and Reanimated's timing.
 
+/**
+ * Height of the tab bar, excluding the safe-area inset.
+ *
+ * Lives here because two files need to agree on it: the tabs layout sets the
+ * bar's height, and every scrolling screen has to pad its content by the same
+ * amount or the last row sits underneath it.
+ */
+export const TAB_BAR_HEIGHT = 58;
+
 /** Raw hex, for the few APIs that take a colour value rather than a class. */
 export const raw = {
   canvas: "#0A0908",
+  surface: "#151310",
+  raised: "#1C1915",
+  hairline: "#25211B",
   foam: "#FFFCF5",
   foamShade: "#E4D6BB",
   beer: "#F5A300",
+  /// Tab bar tints. Icon colours are props, not classes, so `className`
+  /// cannot reach them — they have to be values.
+  tabActive: "#F5A300",
+  tabInactive: "#6E6555",
 } as const;
 
 /**
