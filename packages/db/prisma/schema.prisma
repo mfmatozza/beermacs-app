@@ -1,0 +1,527 @@
+// Beermacs — Prisma schema
+//
+// Connection strategy (Prisma 7 — see prisma.config.ts + docs/SETUP.md):
+//   - Runtime client uses a DRIVER ADAPTER (@prisma/adapter-pg) built from
+//     DATABASE_URL (Neon POOLED `-pooler` host). See src/index.ts.
+//   - Migrations/introspection use DIRECT_URL (Neon UNPOOLED host), configured
+//     as the CLI `datasource` in prisma.config.ts.
+//
+// DESIGN NOTES (see docs/ARCHITECTURE.md):
+//
+//   - THE PHONE HAS NO DATABASE CREDENTIALS. There is no row-level security
+//     here, because there is no client-to-Postgres connection to secure: the
+//     mobile app calls route handlers in apps/web, which are the only thing
+//     holding DATABASE_URL. Every authorisation check therefore lives in the
+//     API layer, calling the same pure functions from @beermacs/shared that the
+//     app uses to render. That is deliberate — the original web app put its
+//     admin gate in a React modal and its permissions in policies that were all
+//     `USING (true)`.
+//
+//   - MATCH RESULTS ARE APPEND-ONLY. `MatchReport` is never updated or
+//     deleted; a disagreement adds a row rather than editing one. The match's
+//     settled winner is a separate, mutable field on Match, written only by the
+//     transition function. This is what makes a dispute reconstructable.
+//
+//   - STAFF OVERRIDES ARE ALWAYS AUDITED. Anything that forces a transition
+//     writes an AuditEntry. The old repo's last eight commits were hand-written
+//     SQL swapping semifinal teams against production, with no record of who
+//     did it or why.
+//
+//   - Soft delete via `deletedAt` where history matters.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Identity ───────────────────────────────────────────────────────────────
+
+enum Role {
+  PLAYER // default. Joins tournaments, reports own results.
+  VENUE_STAFF // runs the night: seed, assign tables, resolve disputes.
+  VENUE_ADMIN // as staff, plus tournaments, tables, news, broadcasts.
+  VENUE_OWNER // as admin, plus billing and staff management.
+}
+
+/// A person. One account can be a PLAYER at one venue and VENUE_ADMIN at
+/// another — roles are per-venue (see VenueMembership), never global. The bar
+/// owner plays too.
+model User {
+  id            String    @id @default(cuid())
+  /// Nullable: players join anonymously with a display name and may never
+  /// give us contact details. Auth identifiers are added only if they want
+  /// their record to follow them between nights.
+  phone         String?   @unique
+  phoneVerified Boolean   @default(false)
+  email         String?   @unique
+  emailVerified Boolean   @default(false)
+  displayName   String
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  memberships   VenueMembership[]
+  teamMembers   TeamMember[]
+  devices       Device[]
+  messages      ChatMessage[]
+  reports       MatchReport[]
+  auditEntries  AuditEntry[]      @relation("AuditActor")
+  authoredNews  News[]            @relation("NewsAuthor")
+
+  @@index([deletedAt])
+}
+
+// ─── Tenancy ────────────────────────────────────────────────────────────────
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+/// The tenant. Everything below hangs off a venue.
+model Venue {
+  id       String  @id @default(cuid())
+  name     String
+  slug     String  @unique
+  city     String?
+  /// For the "venues running a tournament near me" map on Home.
+  latitude  Float?
+  longitude Float?
+  logoUrl  String?
+  timezone String  @default("Europe/Rome")
+
+  /// Present from day one even though billing is not built, so adding it later
+  /// is not a migration against live tournament data. See docs/ROADMAP.md.
+  subscriptionStatus SubscriptionStatus @default(TRIALING)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  memberships VenueMembership[]
+  tables      VenueTable[]
+  tournaments Tournament[]
+  news        News[]
+
+  @@index([deletedAt])
+}
+
+/// Role is per-venue, which is the whole point: a single account can play at
+/// one bar and run the night at another.
+model VenueMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  venueId   String
+  role      Role     @default(PLAYER)
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, venueId])
+  @@index([venueId, role])
+}
+
+// ─── Tables ─────────────────────────────────────────────────────────────────
+
+enum TableState {
+  OPEN
+  BUSY
+  /// Pulled out of rotation by staff — wobbly leg, someone spilled a pint.
+  CLOSED
+}
+
+/// A physical table. `label` is what staff shout across the room, so it is free
+/// text ("Table 3", "Patio", "Upstairs") rather than an integer.
+model VenueTable {
+  id        String     @id @default(cuid())
+  venueId   String
+  label     String
+  state     TableState @default(OPEN)
+  sortOrder Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  venue   Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  matches Match[]
+
+  @@unique([venueId, label])
+  @@index([venueId, sortOrder])
+}
+
+// ─── Tournaments ────────────────────────────────────────────────────────────
+
+enum TournamentFormat {
+  /// Single-elimination knockout.
+  ELIMINATION
+  /// Round-robin groups, top N per group advance into an elimination bracket.
+  GROUP_THEN_ELIMINATION
+}
+
+enum TournamentStatus {
+  DRAFT
+  REGISTRATION
+  RUNNING
+  COMPLETE
+  CANCELED
+}
+
+model Tournament {
+  id      String           @id @default(cuid())
+  venueId String
+  name    String
+  format  TournamentFormat @default(ELIMINATION)
+  status  TournamentStatus @default(DRAFT)
+
+  /// Six characters, Crockford Base32 — see @beermacs/shared join-code.ts.
+  /// Printed on the table tent, read aloud in a loud room.
+  joinCode String @unique
+
+  startsAt DateTime?
+  /// Which stage's matches are currently live.
+  currentRound Int @default(1)
+
+  /// Format knobs a venue may change: cupsToWin, luckyLosers on/off,
+  /// confirmTimeoutMins, teamSize. Kept as JSON so adding double-elimination
+  /// later is a feature flag rather than a migration. Shape and defaults live
+  /// in @beermacs/shared (TournamentFormat / defaultFormat).
+  config Json @default("{}")
+
+  championTeamId String? @unique
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  venue        Venue        @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  stages       Stage[]
+  teams        Team[]
+  matches      Match[]
+  chatChannels ChatChannel[]
+  auditEntries AuditEntry[]
+  champion     Team?        @relation("Champion", fields: [championTeamId], references: [id])
+
+  @@index([venueId, status])
+}
+
+enum StageType {
+  GROUP
+  ELIMINATION
+}
+
+/// A tournament is a sequence of stages. GROUP_THEN_ELIMINATION has two; plain
+/// ELIMINATION has one. This is what keeps the bracket engine format-agnostic.
+model Stage {
+  id           String    @id @default(cuid())
+  tournamentId String
+  type         StageType
+  /// 0-based position in the tournament.
+  order        Int
+  /// For a group stage: how many teams per group advance.
+  advanceCount Int?
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  groups     Group[]
+  matches    Match[]
+
+  @@unique([tournamentId, order])
+}
+
+model Group {
+  id      String @id @default(cuid())
+  stageId String
+  /// "A", "B", … Shown on the standings table.
+  label   String
+
+  stage   Stage        @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  matches Match[]
+  members GroupMember[]
+
+  @@unique([stageId, label])
+}
+
+/// Which teams are in which group. A join table rather than a Team.groupId,
+/// because a team belongs to a group only for the group stage and then moves
+/// into the bracket.
+model GroupMember {
+  id      String @id @default(cuid())
+  groupId String
+  teamId  String
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, teamId])
+}
+
+// ─── Teams ──────────────────────────────────────────────────────────────────
+
+model Team {
+  id           String @id @default(cuid())
+  tournamentId String
+  name         String
+  /// Registration order, NOT competitive seeding — the house format pairs round
+  /// one in the order teams signed up. Staff can drag to reorder before the
+  /// bracket is generated.
+  seed         Int
+
+  createdAt DateTime @default(now())
+
+  tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  members      TeamMember[]
+  groupMembers GroupMember[]
+  homeMatches  Match[]      @relation("HomeTeam")
+  awayMatches  Match[]      @relation("AwayTeam")
+  wonMatches   Match[]      @relation("Winner")
+  reports      MatchReport[]
+  wonChampionship Tournament? @relation("Champion")
+
+  @@unique([tournamentId, name])
+  @@index([tournamentId, seed])
+}
+
+model TeamMember {
+  id       String  @id @default(cuid())
+  teamId   String
+  userId   String
+  /// First person to claim the team. Captains report and confirm results.
+  isCaptain Boolean @default(false)
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+// ─── Matches ────────────────────────────────────────────────────────────────
+
+/// Mirrors MatchState in @beermacs/shared. The old app had three states and set
+/// the winner with a client-side UPDATE, so any team could declare itself the
+/// winner. These six exist so "both teams approved" is a state the server can
+/// check rather than a promise the UI makes.
+enum MatchState {
+  /// Slots not both filled, or feeders unfinished. Not playable.
+  SCHEDULED
+  /// Playable, waiting for a table. In the dispatcher queue.
+  QUEUED
+  /// On a physical table, clock running.
+  ON_TABLE
+  /// One captain has reported; the other side has not answered.
+  REPORTED
+  /// The other side rejected, or nobody answered within the timeout.
+  DISPUTED
+  /// Settled. winnerTeamId and scores are final.
+  CONFIRMED
+}
+
+model Match {
+  id           String @id @default(cuid())
+  tournamentId String
+  stageId      String
+  /// Set only for group-stage matches.
+  groupId      String?
+
+  round    Int
+  /// Index within the round, 0-based. Drives bracket layout.
+  position Int
+
+  homeTeamId String?
+  awayTeamId String?
+  /// Re-entered from the lucky-loser pool. Rendered with a 🍀 in the bracket.
+  homeViaLuckyLoser Boolean @default(false)
+  awayViaLuckyLoser Boolean @default(false)
+
+  state MatchState @default(SCHEDULED)
+
+  /// Written ONLY by the result transition in @beermacs/shared, called from a
+  /// route handler. Never set directly from a client payload.
+  winnerTeamId String?
+  homeScore    Int?
+  awayScore    Int?
+
+  /// A bye: one team, no opponent, auto-advanced. Kept as a real match so the
+  /// bracket renders a complete round and round planning needs no special case.
+  isBye Boolean @default(false)
+
+  venueTableId String?
+  /// When the dispatcher sent it to a table — drives the "you're up" push.
+  calledAt     DateTime?
+  settledAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tournament Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  stage      Stage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  group      Group?        @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  homeTeam   Team?         @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: SetNull)
+  awayTeam   Team?         @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: SetNull)
+  winner     Team?         @relation("Winner", fields: [winnerTeamId], references: [id], onDelete: SetNull)
+  venueTable VenueTable?   @relation(fields: [venueTableId], references: [id], onDelete: SetNull)
+  reports    MatchReport[]
+  channel    ChatChannel?
+
+  @@unique([stageId, round, position])
+  @@index([tournamentId, state])
+  @@index([venueTableId])
+}
+
+enum ReportKind {
+  /// A captain claiming a result.
+  CLAIM
+  /// The other captain agreeing with the standing claim.
+  CONFIRM
+  /// The other captain disagreeing.
+  REJECT
+  /// Nobody answered inside the tournament's confirmTimeoutMins.
+  TIMEOUT
+  /// Staff settling it. Requires a reason.
+  STAFF_RESOLVE
+}
+
+/// APPEND-ONLY. A disagreement adds a row; it never edits one. This is what
+/// makes a dispute reconstructable — staff resolving it can see exactly what
+/// each side claimed, and when.
+model MatchReport {
+  id      String     @id @default(cuid())
+  matchId String
+  kind    ReportKind
+
+  /// Null for TIMEOUT (raised by a scheduled job, not a person).
+  actorUserId String?
+  /// The team the actor was reporting for. Null for staff actions.
+  teamId      String?
+
+  claimedWinnerTeamId String?
+  homeScore           Int?
+  awayScore           Int?
+  reason              String?
+
+  createdAt DateTime @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  team  Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([matchId, createdAt])
+}
+
+// ─── Audit ──────────────────────────────────────────────────────────────────
+
+/// Every staff action that forces a transition or edits a bracket. The answer
+/// to "who changed the semifinal?", which the old app could not give.
+model AuditEntry {
+  id           String  @id @default(cuid())
+  tournamentId String
+  actorUserId  String?
+  /// e.g. "match.staff_resolve", "bracket.swap_slots", "team.remove".
+  action       String
+  reason       String?
+  /// Before/after snapshots of whatever changed.
+  before       Json?
+  after        Json?
+  createdAt    DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  actor      User?      @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tournamentId, createdAt])
+}
+
+// ─── News ───────────────────────────────────────────────────────────────────
+
+/// The venue's announcement feed on Home. The primary advertising surface, and
+/// the trigger for a broadcast push.
+model News {
+  id          String    @id @default(cuid())
+  venueId     String
+  authorId    String?
+  title       String
+  body        String
+  imageUrl    String?
+  publishedAt DateTime?
+  /// Whether publishing also sent a push to the venue's players.
+  pushSentAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  venue  Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  author User? @relation("NewsAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([venueId, publishedAt])
+}
+
+// ─── Chat ───────────────────────────────────────────────────────────────────
+
+enum ChannelKind {
+  /// Everyone playing tonight.
+  TOURNAMENT
+  /// Auto-created when a match goes on a table, archived on settle.
+  MATCH
+  /// Staff write, everyone reads.
+  BROADCAST
+}
+
+model ChatChannel {
+  id           String      @id @default(cuid())
+  tournamentId String
+  kind         ChannelKind
+  /// Set only for MATCH channels.
+  matchId      String?     @unique
+  archivedAt   DateTime?
+  createdAt    DateTime    @default(now())
+
+  tournament Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match      Match?        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  messages   ChatMessage[]
+
+  @@index([tournamentId, kind])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  channelId String
+  authorId  String?
+  body      String
+  createdAt DateTime @default(now())
+  /// Soft delete so staff removal is auditable and reversible.
+  deletedAt DateTime?
+  /// Set when a viewer reports it. App Store guideline 1.2 requires a report
+  /// path for user-generated content before the app can ship with chat.
+  flaggedAt DateTime?
+
+  channel ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author  User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([channelId, createdAt])
+}
+
+// ─── Push ───────────────────────────────────────────────────────────────────
+
+enum Platform {
+  IOS
+  ANDROID
+}
+
+/// One row per install. The Expo push token, not a raw APNs/FCM token — sends
+/// go through Expo's push service from a route handler in apps/web.
+model Device {
+  id            String   @id @default(cuid())
+  userId        String
+  expoPushToken String   @unique
+  platform      Platform
+  /// Per-category opt-outs, e.g. { news: false, yourTurn: true }. A player who
+  /// mutes announcements must still get "you're up — Table 3".
+  preferences   Json     @default("{}")
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

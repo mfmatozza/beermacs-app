@@ -3,14 +3,19 @@
 ## The rule that shapes everything
 
 Tournament logic lives in `packages/shared` as pure functions, and nothing in
-there imports React or Supabase.
+there imports React or a database client.
 
-That constraint exists because the same rules have to run in three places and
-agree in all of them: the app renders them, Postgres functions enforce them, and
-`node --test` exercises them. The old web app put its rules in a React hook and
-its permissions in a modal, which meant "both teams must approve the result" was
-a promise the UI made and the API happily ignored — every RLS policy was
-`USING (true)`, so a losing captain could have set `winner_id` from the console.
+The same rules have to run in two places and agree in both: the mobile app
+renders them, and the route handlers in `apps/web` enforce them. `node --test`
+exercises the same code.
+
+This matters more than it would on a client-accessible database. **The phone
+holds no database credentials.** `DATABASE_URL` exists only in `apps/web` on
+Vercel, so there is no client-to-Postgres connection and therefore no row-level
+security to fall back on — the API layer _is_ the security boundary. The old web
+app put its rules in a React hook and its permissions in a modal, which meant
+"both teams must approve the result" was a promise the UI made and the database
+happily ignored.
 
 Concretely:
 
@@ -55,9 +60,28 @@ Concretely:
 - `apps/web` is excluded in `.easignore`: nothing in the mobile build graph
   depends on it, so EAS should not install its dependencies.
 
+## Infrastructure
+
+Everything runs on Vercel; Postgres is Neon, provisioned through Vercel Storage.
+
+| Concern       | Choice                                                  |
+| ------------- | ------------------------------------------------------- |
+| Hosting + API | Vercel (`apps/web` route handlers)                      |
+| Database      | Neon Postgres, pooled at runtime, direct for migrations |
+| ORM           | Prisma 7 with the `@prisma/adapter-pg` driver adapter   |
+| Push          | Expo push service, called from a route handler          |
+
+There is no Supabase and no Firebase. One consequence is worth stating plainly:
+the security model is _not_ row-level security. See above — authorisation is
+server-side code in `apps/web`, calling `@beermacs/shared`.
+
+The second consequence is **live updates**, which a client-connected database
+would have given for free. See [ROADMAP.md](ROADMAP.md) — this is an open
+decision, not a solved problem.
+
 ## Not built yet
 
-`packages/db` is the slot for the Supabase project: schema, RLS and the
-generated types. It does not exist yet because the project does not. Until then
-`apps/mobile/lib/fixtures.ts` stands in, typed against `@beermacs/shared` so the
-screens do not move when the real queries land. See [ROADMAP.md](ROADMAP.md).
+`packages/db` has the schema and the Neon client, but no migration has been run
+and there is no Neon project yet. Until there is, `apps/mobile/lib/fixtures.ts`
+stands in, typed against `@beermacs/shared` so the screens do not move when the
+real queries land. See [ROADMAP.md](ROADMAP.md).

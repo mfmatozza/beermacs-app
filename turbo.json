@@ -4,9 +4,11 @@
   "globalEnv": ["NODE_ENV"],
   "globalPassThroughEnv": [
     "APP_ENV",
-    "EXPO_PUBLIC_SUPABASE_URL",
-    "EXPO_PUBLIC_SUPABASE_ANON_KEY",
-    "SUPABASE_SERVICE_ROLE_KEY",
+    "DATABASE_URL",
+    "DIRECT_URL",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "EXPO_PUBLIC_API_URL",
     "SENTRY_DSN"
   ],
   "tasks": {

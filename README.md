@@ -18,7 +18,7 @@ apps/
                      billing and the big-screen bracket later.
 packages/
   config/            shared ESLint / Prettier / TypeScript base config
-  shared/            tournament rules + Zod schemas. No React, no Supabase.
+  shared/            tournament rules + Zod schemas. No React, no database.
 docs/                architecture, setup, roadmap
 ```
 

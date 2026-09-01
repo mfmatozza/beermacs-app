@@ -7,7 +7,7 @@ import {
 } from "@beermacs/shared";
 
 /**
- * TEMPORARY. Stands in for `packages/api` until there is a Supabase project to
+ * TEMPORARY. Stands in for the API client until apps/web exposes route handlers to
  * talk to (phase 1 of the plan).
  *
  * It is typed against `@beermacs/shared` rather than hand-shaped for the screens,

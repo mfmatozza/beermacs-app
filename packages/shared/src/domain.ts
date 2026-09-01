@@ -1,6 +1,6 @@
 /**
  * The vocabulary. These types are the contract between the app, the database
- * and the edge functions — nothing here knows about React, Supabase or SQL.
+ * and the API — nothing here knows about React, Prisma or SQL.
  */
 
 export type TeamId = string;

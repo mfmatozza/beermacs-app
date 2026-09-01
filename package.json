@@ -2,7 +2,7 @@
   "name": "beermacs",
   "private": true,
   "version": "0.0.0",
-  "description": "Beermacs — beer pong tournament platform for bars (monorepo: mobile)",
+  "description": "Beermacs — beer pong tournament platform for bars (monorepo: mobile + web/api)",
   "license": "UNLICENSED",
   "workspaces": [
     "apps/*",
@@ -19,7 +19,12 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "pretypecheck": "npm run db:generate",
+    "db:generate": "npm run generate -w @beermacs/db",
+    "db:migrate": "npm run migrate -w @beermacs/db",
+    "db:studio": "npm run studio -w @beermacs/db",
+    "db:seed": "npm run seed -w @beermacs/db"
   },
   "devDependencies": {
     "prettier": "^3.9.5",
@@ -31,6 +36,8 @@
     "@shopify/react-native-skia@2.6.2": true,
     "esbuild@0.28.2": true,
     "fsevents@2.3.3": true,
-    "unrs-resolver@1.12.2": true
+    "unrs-resolver@1.12.2": true,
+    "prisma@7.10.0": true,
+    "@prisma/engines@7.10.0": true
   }
 }

@@ -180,7 +180,7 @@ export default function HomeScreen() {
       </View>
 
       <Text className="text-center font-sans text-[13px] text-cream-faint">
-        Phase 0 build · screens read from typed fixtures until the Supabase project lands
+        Phase 0 build · screens read from typed fixtures until the API lands
       </Text>
     </ScrollView>
   );
