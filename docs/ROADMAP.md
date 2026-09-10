@@ -84,7 +84,8 @@ The largest remaining chunk of screens. In build order:
    indistinguishable once created; force a result (A-12) via the same
    transition() state machine a captain's report goes through — no separate
    admin code path to keep in sync with the rules.
-4. **Repêchage** — draw a team back in, auto or by name (A-9/A-10), any time.
+4. **Repêchage** (done) — draw a team back in, auto or by name (A-9/A-10),
+   any time, independent of parity. Pool scoped to the round's stage.
 5. **Player directory** — the email/phone list for re-contacting players next
    time (A-21), gated to `VENUE_ADMIN`+.
 6. **Messaging** — a single team, a single person, or a broadcast to everyone
