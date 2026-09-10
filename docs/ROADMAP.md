@@ -86,10 +86,15 @@ The largest remaining chunk of screens. In build order:
    admin code path to keep in sync with the rules.
 4. **Repêchage** (done) — draw a team back in, auto or by name (A-9/A-10),
    any time, independent of parity. Pool scoped to the round's stage.
-5. **Player directory** — the email/phone list for re-contacting players next
-   time (A-21), gated to `VENUE_ADMIN`+.
-6. **Messaging** — a single team, a single person, or a broadcast to everyone
-   at the venue (A-18/A-19), each triggering a push.
+5. **Player directory** (done) — GET /api/venues/:id/players (A-21), gated
+   to VENUE_ADMIN+ specifically (VENUE_STAFF is 403 — bulk contact details are
+   an admin action, not a night-of one).
+6. **Messaging** (done) — a team, a person, or a broadcast, scoped to a
+   tournament (A-18/A-19 — "anyone in the app" read as "anyone in this
+   tournament", since every messaging surface the spec describes elsewhere is
+   tournament-scoped and ChatChannel.tournamentId is non-nullable by schema).
+   VENUE_STAFF+, matching the existing staff chat access (U-10/A-20). Push on
+   send is a marked TODO for phase 5, not faked.
 7. **Format change mid-tournament** (A-6) — a field update per D9, but the UI
    has to make clear what happens to matches already in flight.
 
