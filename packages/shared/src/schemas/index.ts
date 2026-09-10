@@ -5,8 +5,8 @@ import { joinCodeLength, normaliseJoinCode } from "../join-code";
 // boundary. TS types are inferred from them (`z.infer<...>`), never duplicated.
 //
 // The entity shapes themselves live in ../domain.ts — these are the *payloads*
-// an app sends. Each one is also what the matching Postgres function validates,
-// so a client that skips the schema still can't get past the server.
+// an app sends. Each one is also what the matching route handler in apps/web
+// validates, so a client that skips the schema still can't get past the server.
 
 // Every Prisma id is @default(cuid()), not a UUID — cuids don't match the
 // hyphenated 8-4-4-4-12 hex shape z.string().uuid() checks for, so that
@@ -38,7 +38,7 @@ export const signInInput = z.object({
 });
 export type SignInInput = z.infer<typeof signInInput>;
 
-// ── Joining ─────────────────────────────────────────────────────────────────
+// ── Joining a tournament (U-1..U-4) ──────────────────────────────────────────
 
 /**
  * Payload for POST /api/tournaments/join — the code off the table tent.
@@ -62,18 +62,32 @@ export const joinTournamentInput = z.object({
 });
 export type JoinTournamentInput = z.infer<typeof joinTournamentInput>;
 
-/** Payload for POST /rpc/create_team. */
+/** Payload for POST /api/tournaments/:id/teams — a player forming their team. */
 export const createTeamInput = z.object({
-  tournamentId: id,
   name: z.string().trim().min(1).max(40),
 });
 export type CreateTeamInput = z.infer<typeof createTeamInput>;
 
-// ── Results ─────────────────────────────────────────────────────────────────
+/** Payload for POST /api/teams/:id/join — a teammate using the invite code. */
+export const joinTeamInput = z.object({
+  code: z
+    .string()
+    .min(1)
+    .max(32)
+    .transform(normaliseJoinCode)
+    .refine((c) => c.length === joinCodeLength, {
+      message: `Team codes are ${joinCodeLength} characters`,
+    }),
+});
+export type JoinTeamInput = z.infer<typeof joinTeamInput>;
+
+// ── Results (U-11..U-14, A-12) ───────────────────────────────────────────────
 
 /**
- * A beer pong score. Bounds are checked again in `plausibleScore` against the
- * tournament's own `cupsToWin`, which this schema can't see.
+ * A beer pong score. Optional wherever it's used below — U-11 only asks who
+ * won; a triangular or group format may not score matches at all. Bounds are
+ * checked again in @beermacs/shared's `plausible()` against the tournament's
+ * own `cupsToWin`, which this schema can't see.
  */
 export const scoreInput = z.object({
   home: z.number().int().min(0).max(30),
@@ -81,73 +95,152 @@ export const scoreInput = z.object({
 });
 export type ScoreInput = z.infer<typeof scoreInput>;
 
-/** Payload for POST /rpc/report_result — a captain claiming a result. */
+/** Payload for POST /api/matches/:id/report — a captain claiming a result. */
 export const reportResultInput = z.object({
-  matchId: id,
   winnerId: id,
-  score: scoreInput,
+  score: scoreInput.optional(),
 });
 export type ReportResultInput = z.infer<typeof reportResultInput>;
 
-/** Payload for POST /rpc/confirm_result — the *other* captain agreeing. */
-export const confirmResultInput = z.object({
-  matchId: id,
-});
+/** Payload for POST /api/matches/:id/confirm — the *other* captain agreeing. */
+export const confirmResultInput = z.object({});
 export type ConfirmResultInput = z.infer<typeof confirmResultInput>;
 
-/** Payload for POST /rpc/reject_result — the other captain disagreeing. */
+/** Payload for POST /api/matches/:id/reject — the other captain disagreeing. */
 export const rejectResultInput = z.object({
-  matchId: id,
   reason: z.string().trim().max(280).optional(),
 });
 export type RejectResultInput = z.infer<typeof rejectResultInput>;
 
 /**
- * Payload for POST /rpc/staff_resolve — staff settling it from any state.
- * `reason` is required, not optional: every forced result writes an audit row,
- * and an audit row with no reason is not worth writing.
+ * Payload for POST /api/matches/:id/resolve — an admin settling it (A-12),
+ * from any state. `reason` is required, not optional: every forced result
+ * writes an audit row, and an audit row with no reason is not worth writing.
  */
 export const staffResolveInput = z.object({
-  matchId: id,
   winnerId: id,
-  score: scoreInput,
+  score: scoreInput.optional(),
   reason: z.string().trim().min(1).max(280),
 });
 export type StaffResolveInput = z.infer<typeof staffResolveInput>;
 
-// ── Tables ──────────────────────────────────────────────────────────────────
+// ── Tables (A-3/A-4) ──────────────────────────────────────────────────────────
 
-/** Payload for POST /rpc/assign_table — send a match to a physical table. */
+/** Payload for POST /api/matches/:id/assign-table — send a match to a table. */
 export const assignTableInput = z.object({
-  matchId: id,
   tableId: id,
 });
 export type AssignTableInput = z.infer<typeof assignTableInput>;
 
-/** Payload for POST /rpc/set_table_state — pull a wobbly table out of rotation. */
+/** Payload for POST /api/tables/:id/state — pull a wobbly table out of rotation. */
 export const setTableStateInput = z.object({
-  tableId: id,
   state: z.enum(["open", "closed"]),
 });
 export type SetTableStateInput = z.infer<typeof setTableStateInput>;
 
-// ── Bracket ─────────────────────────────────────────────────────────────────
-
-/** Payload for POST /rpc/advance_round. */
-export const advanceRoundInput = z.object({
-  tournamentId: id,
-  round: z.number().int().min(1),
-});
-export type AdvanceRoundInput = z.infer<typeof advanceRoundInput>;
+// ── Creating and configuring a tournament (A-1..A-6) ─────────────────────────
 
 /**
- * Payload for POST /rpc/swap_slots — what eight commits of hand-written SQL
- * were doing to the old app's production database, mid-tournament.
+ * Payload for POST /api/venues/:id/tournaments.
+ *
+ * `tableLabels` upserts the venue's physical tables (A-3/A-4) — tables belong
+ * to the venue, not the tournament, so re-running this with the same labels on
+ * a venue's second tournament is a no-op, not a duplicate set.
  */
-export const swapSlotsInput = z.object({
-  tournamentId: id,
-  from: z.object({ matchId: id, slot: z.enum(["home", "away"]) }),
-  to: z.object({ matchId: id, slot: z.enum(["home", "away"]) }),
-  reason: z.string().trim().min(1).max(280),
+export const createTournamentInput = z.object({
+  name: z.string().trim().min(1).max(60),
+  format: z.enum(["single_elimination", "group_then_knockout", "triangular"]),
+  playersPerTeam: z.number().int().min(1).max(12),
+  chatEnabled: z.boolean(),
+  /** Null = this format doesn't score matches at all. */
+  cupsToWin: z.number().int().min(1).max(30).nullable(),
+  confirmTimeoutMins: z.number().int().min(1).max(180),
+  autoRepechageMode: z.enum(["auto", "manual"]),
+  tableLabels: z.array(z.string().trim().min(1).max(24)).min(1).max(64),
 });
-export type SwapSlotsInput = z.infer<typeof swapSlotsInput>;
+export type CreateTournamentInput = z.infer<typeof createTournamentInput>;
+
+/**
+ * Payload for PATCH /api/tournaments/:id — A-6, changing the format while the
+ * tournament is running. A field update, deliberately: see docs/DECISIONS.md
+ * D9. Every field optional, since this also covers smaller config edits
+ * (toggling chat, changing the confirm timeout) that aren't a format change.
+ */
+export const updateTournamentInput = z.object({
+  format: z.enum(["single_elimination", "group_then_knockout", "triangular"]).optional(),
+  playersPerTeam: z.number().int().min(1).max(12).optional(),
+  chatEnabled: z.boolean().optional(),
+  cupsToWin: z.number().int().min(1).max(30).nullable().optional(),
+  confirmTimeoutMins: z.number().int().min(1).max(180).optional(),
+  autoRepechageMode: z.enum(["auto", "manual"]).optional(),
+});
+export type UpdateTournamentInput = z.infer<typeof updateTournamentInput>;
+
+// ── Rounds (A-13..A-17) ───────────────────────────────────────────────────────
+
+/** Payload for POST /api/rounds/:id/open — A-13. No body; the id says it all. */
+export const openRoundInput = z.object({});
+export type OpenRoundInput = z.infer<typeof openRoundInput>;
+
+/** Payload for POST /api/rounds/:id/scheduling — A-15, pause or resume. */
+export const setRoundSchedulingInput = z.object({
+  paused: z.boolean(),
+});
+export type SetRoundSchedulingInput = z.infer<typeof setRoundSchedulingInput>;
+
+/**
+ * Payload for POST /api/rounds/:id/pair — A-16, an admin manually pairing two
+ * specific teams into this round, overriding random matchmaking. Both teams
+ * must already be entrants of this round with nothing paired yet — the route
+ * handler checks that against `waitingTeams()`, this schema only checks shape.
+ */
+export const manualPairInput = z.object({
+  homeTeamId: id,
+  awayTeamId: id,
+});
+export type ManualPairInput = z.infer<typeof manualPairInput>;
+
+// ── Teams (A-7..A-11) ─────────────────────────────────────────────────────────
+
+/** Payload for POST /api/tournaments/:id/teams/admin-add — A-7/A-8, staff
+ *  adding a team directly (no join code needed) at any point. */
+export const adminAddTeamInput = z.object({
+  name: z.string().trim().min(1).max(40),
+});
+export type AdminAddTeamInput = z.infer<typeof adminAddTeamInput>;
+
+/** Payload for POST /api/teams/:id/withdraw — A-8. */
+export const withdrawTeamInput = z.object({
+  reason: z.string().trim().max(280).optional(),
+});
+export type WithdrawTeamInput = z.infer<typeof withdrawTeamInput>;
+
+/**
+ * Payload for POST /api/rounds/:id/repechage — A-9/A-10, drawing a team back
+ * in at any time, independent of whether the round's count is actually odd.
+ * `teamId` omitted = "pick one for me" (the same auto-pick E-8 uses); named =
+ * the admin's own choice. Both are legitimate any time (A-9).
+ */
+export const repechageInput = z.object({
+  teamId: id.optional(),
+});
+export type RepechageInput = z.infer<typeof repechageInput>;
+
+// ── Messaging (A-18/A-19) ─────────────────────────────────────────────────────
+
+/**
+ * Payload for POST /api/venues/:id/messages. Exactly one target field —
+ * enforced by `.refine` below, not by three separate endpoints, since it's the
+ * same send action with a different recipient set (A-18: one team, one
+ * person, or — all fields omitted — everyone at the venue, A-19).
+ */
+export const sendAdminMessageInput = z
+  .object({
+    body: z.string().trim().min(1).max(2000),
+    teamId: id.optional(),
+    recipientUserId: id.optional(),
+  })
+  .refine((v) => !(v.teamId && v.recipientUserId), {
+    message: "Target either a team or a person, not both",
+  });
+export type SendAdminMessageInput = z.infer<typeof sendAdminMessageInput>;

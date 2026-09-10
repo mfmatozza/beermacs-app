@@ -62,8 +62,13 @@ enough.
 
 The largest remaining chunk of screens. In build order:
 
-1. **Create a tournament** — format (A-5), team size, chat on/off (A-2), table
-   count and labels (A-3/A-4).
+1. **Create a tournament** (done) — format (A-5), team size, chat on/off
+   (A-2), table count and labels (A-3/A-4). `POST /api/venues/:id/tournaments`
+   creates the tournament, its Stage(s) (two for group-then-knockout), Round 1
+   not-opened (E-7), and upserts the venue's tables idempotently. Verified
+   against Neon: role-gated to VENUE_ADMIN+, group-then-knockout produces
+   GROUP+ELIMINATION stages, re-running with an overlapping table label
+   reuses it rather than duplicating.
 2. **Round control** — open a round (A-13), see several open at once (A-14),
    pause/resume auto-dispatch (A-15).
 3. **Team management** — add a team at any point (A-7/A-8), withdraw one,

@@ -4,7 +4,7 @@
 // session cookie that @better-auth/expo stores, so the handlers' `requireViewer`
 // sees the same user.
 
-import type { JoinTournamentInput } from "@beermacs/shared";
+import type { CreateTournamentInput, JoinTournamentInput } from "@beermacs/shared";
 import { authClient } from "./auth-client";
 import { API_URL } from "./config";
 
@@ -67,10 +67,22 @@ export interface JoinResponse {
   readonly venue: { id: string; name: string; city: string | null };
 }
 
+export interface CreateTournamentResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly joinCode: string;
+  readonly status: string;
+}
+
 export const api = {
   me: () => request<MeResponse>("/api/me"),
   join: (body: JoinTournamentInput) =>
     request<JoinResponse>("/api/tournaments/join", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  createTournament: (venueId: string, body: CreateTournamentInput) =>
+    request<CreateTournamentResponse>(`/api/venues/${venueId}/tournaments`, {
       method: "POST",
       body: JSON.stringify(body),
     }),

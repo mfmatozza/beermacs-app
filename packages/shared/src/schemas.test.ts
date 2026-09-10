@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { joinTournamentInput, registerInput, signInInput } from "./schemas";
+import {
+  createTournamentInput,
+  joinTournamentInput,
+  registerInput,
+  reportResultInput,
+  sendAdminMessageInput,
+  signInInput,
+  staffResolveInput,
+} from "./schemas";
 
 describe("joinTournamentInput", () => {
   it("accepts a code as it is actually typed, and normalises it", () => {
@@ -75,5 +83,83 @@ describe("signInInput", () => {
     const r = signInInput.parse({ email: "A@B.com", password: "Whatever1" });
     assert.strictEqual(r.email, "a@b.com");
     assert.strictEqual(r.password, "Whatever1");
+  });
+});
+
+describe("reportResultInput / staffResolveInput", () => {
+  it("accepts a report with no score at all — U-11 only asks who won", () => {
+    const r = reportResultInput.parse({ winnerId: "t1" });
+    assert.strictEqual(r.score, undefined);
+  });
+
+  it("still accepts a score when the format wants one", () => {
+    const r = reportResultInput.parse({ winnerId: "t1", score: { home: 10, away: 7 } });
+    assert.deepStrictEqual(r.score, { home: 10, away: 7 });
+  });
+
+  it("requires a reason on a staff resolve, even with no score", () => {
+    assert.throws(() => staffResolveInput.parse({ winnerId: "t1", reason: "" }));
+    const r = staffResolveInput.parse({ winnerId: "t1", reason: "no-show" });
+    assert.strictEqual(r.reason, "no-show");
+  });
+});
+
+describe("createTournamentInput", () => {
+  it("accepts a full valid payload", () => {
+    const r = createTournamentInput.parse({
+      name: "Friday Night Cups",
+      format: "single_elimination",
+      playersPerTeam: 2,
+      chatEnabled: true,
+      cupsToWin: 10,
+      confirmTimeoutMins: 15,
+      autoRepechageMode: "auto",
+      tableLabels: ["Table 1", "Table 2"],
+    });
+    assert.strictEqual(r.tableLabels.length, 2);
+  });
+
+  it("allows cupsToWin to be null — a format that doesn't score", () => {
+    const r = createTournamentInput.parse({
+      name: "Triangular Night",
+      format: "triangular",
+      playersPerTeam: 2,
+      chatEnabled: false,
+      cupsToWin: null,
+      confirmTimeoutMins: 15,
+      autoRepechageMode: "manual",
+      tableLabels: ["Table 1"],
+    });
+    assert.strictEqual(r.cupsToWin, null);
+  });
+
+  it("rejects an empty table list", () => {
+    assert.throws(() =>
+      createTournamentInput.parse({
+        name: "X",
+        format: "single_elimination",
+        playersPerTeam: 2,
+        chatEnabled: true,
+        cupsToWin: 10,
+        confirmTimeoutMins: 15,
+        autoRepechageMode: "auto",
+        tableLabels: [],
+      })
+    );
+  });
+});
+
+describe("sendAdminMessageInput", () => {
+  it("accepts a broadcast (no team, no recipient)", () => {
+    const r = sendAdminMessageInput.parse({ body: "Round 2 starts in 10 minutes" });
+    assert.strictEqual(r.teamId, undefined);
+  });
+
+  it("accepts a message to one team, or to one person, but not both", () => {
+    assert.doesNotThrow(() => sendAdminMessageInput.parse({ body: "hi", teamId: "t1" }));
+    assert.doesNotThrow(() => sendAdminMessageInput.parse({ body: "hi", recipientUserId: "u1" }));
+    assert.throws(() =>
+      sendAdminMessageInput.parse({ body: "hi", teamId: "t1", recipientUserId: "u1" })
+    );
   });
 });
