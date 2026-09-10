@@ -407,6 +407,12 @@ model Team {
   tournamentId String
   name         String
 
+  /// U-3: the team creator invites teammates with this — its own code,
+  /// separate from the tournament's join code (which only gets someone
+  /// into the tournament, U-1). Six characters, same Crockford Base32
+  /// alphabet as the tournament code.
+  joinCode String @unique
+
   /// E-6/E-7: the round this team's participation starts at. Every team formed
   /// before round 1 opens gets 1; a team added mid-tournament (A-7 — there is
   /// no cut-off, A-8) gets whichever round was the lowest OPEN one the moment

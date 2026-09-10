@@ -5,15 +5,31 @@
 // whichever round is currently the lowest OPEN one (E-6), or 1 if none is open
 // yet (E-7) — so it lives here rather than being copied between two routes.
 
-import { entryRoundForNewTeam, type Round as DomainRound } from "@beermacs/shared";
+import {
+  entryRoundForNewTeam,
+  generateJoinCode,
+  type Round as DomainRound,
+} from "@beermacs/shared";
 import { prisma } from "@beermacs/db";
 import { HttpError } from "./session";
+
+/** Same collision-avoidance loop the tournament route uses for its own
+ *  join code — copied rather than shared because the two codes are
+ *  checked against different tables (Team vs Tournament). */
+async function uniqueTeamJoinCode(): Promise<string> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const code = generateJoinCode();
+    const clash = await prisma.team.findUnique({ where: { joinCode: code } });
+    if (!clash) return code;
+  }
+  throw new Error("Could not generate a unique team join code after 8 attempts");
+}
 
 export async function createTeamInTournament(
   tournamentId: string,
   name: string,
   captainUserId: string | null
-): Promise<{ id: string; name: string; entryRound: number }> {
+): Promise<{ id: string; name: string; entryRound: number; joinCode: string }> {
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
     select: {
@@ -50,9 +66,11 @@ export async function createTeamInTournament(
   const targetRound = firstStage.rounds.find((r) => r.index === entryRound);
   if (!targetRound) throw new HttpError(500, "entry_round_missing");
 
+  const joinCode = await uniqueTeamJoinCode();
+
   return prisma.$transaction(async (tx) => {
     const created = await tx.team.create({
-      data: { tournamentId, name, entryRound },
+      data: { tournamentId, name, entryRound, joinCode },
     });
     if (captainUserId) {
       await tx.teamMember.create({
@@ -62,6 +80,11 @@ export async function createTeamInTournament(
     await tx.roundEntrant.create({
       data: { roundId: targetRound.id, teamId: created.id, viaRepechage: false },
     });
-    return { id: created.id, name: created.name, entryRound: created.entryRound };
+    return {
+      id: created.id,
+      name: created.name,
+      entryRound: created.entryRound,
+      joinCode: created.joinCode,
+    };
   });
 }
