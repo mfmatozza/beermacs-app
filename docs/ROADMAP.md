@@ -108,13 +108,29 @@ order it was actually built:
 
 ## Phase 4 — the live loop (E-1..E-8, U-5..U-7)
 
+1. **The result flow** (U-11..U-14, done) — `report`/`confirm`/`reject` for
+   the two-captain path, `resolve` for staff force-settle, all through the
+   one `transition()` state machine. Settling a match (any of the three
+   routes) now also advances the winner into `RoundEntrant` for the next
+   round (`advanceWinnerToNextRound` in `lib/match-mapping.ts`) — a real gap
+   found while testing this phase: nothing wrote that row before, so a
+   bracket had no way to progress past round 1. A no-op for a group-stage
+   match (`groupId` set) — a group's promotion is a standings computation
+   after every match in the group, not a per-match advance.
+2. **The automatic dispatcher** (E-1..E-3/E-8, done) — `lib/dispatch.ts` +
+   `POST /venues/:id/dispatch/run`, VENUE_STAFF+. Pairs waiting teams
+   per open/unpaused round (auto-repêchage on an odd count), then hands out
+   free tables venue-wide via `planDispatch()`, each table claim applied as
+   its own conditional `UPDATE ... WHERE state = 'OPEN'` so two staff phones
+   calling this at once can't double-book a table. Verified against real
+   Neon end to end: create tournament → join → team → open round → dispatch
+   pairs and assigns a table → settle → winner lands in round 2, table
+   returns to OPEN — for both the resolve path and the report/confirm path.
+   Finding this required first fixing D12 (nothing transitioned a tournament
+   to `RUNNING`, which the dispatch pass gates on).
 - The public bracket/standings view (U-7, E-5), updating as matches are
   assigned and confirmed.
 - "Who I play, when, which table" on the player's own screen (U-5/U-6).
-- The automatic dispatcher wired end to end: pair waiting teams (E-1), hand out
-  free tables (E-2/E-3), trigger auto-repêchage on an odd count (E-8) — the
-  pure functions exist; this phase is the route handlers and the transaction
-  around them (two staff phones must not double-book a table).
 
 ## Phase 5 — push (U-15..U-17)
 

@@ -10,7 +10,11 @@ import { staffResolveInput, transition } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
-import { MATCH_STATE_TO_PRISMA, toDomainMatch } from "@/lib/match-mapping";
+import {
+  advanceWinnerToNextRound,
+  MATCH_STATE_TO_PRISMA,
+  toDomainMatch,
+} from "@/lib/match-mapping";
 import { HttpError, requireVenueRoleForMatch } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -26,6 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
       select: {
         id: true,
         roundId: true,
+        groupId: true,
         position: true,
         homeTeamId: true,
         awayTeamId: true,
@@ -64,8 +69,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
 
     const { match: settled, releasesTable } = outcome.value;
 
-    await prisma.$transaction([
-      prisma.match.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.match.update({
         where: { id: matchId },
         data: {
           state: MATCH_STATE_TO_PRISMA[settled.state],
@@ -75,11 +80,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
           venueTableId: settled.tableId,
           settledAt: new Date(),
         },
-      }),
-      ...(releasesTable
-        ? [prisma.venueTable.update({ where: { id: releasesTable }, data: { state: "OPEN" } })]
-        : []),
-      prisma.auditEntry.create({
+      });
+      if (releasesTable) {
+        await tx.venueTable.update({ where: { id: releasesTable }, data: { state: "OPEN" } });
+      }
+      await tx.auditEntry.create({
         data: {
           tournamentId: row.tournamentId,
           actorUserId: viewer.userId,
@@ -88,8 +93,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
           before: { state: row.state, winnerTeamId: row.winnerTeamId },
           after: { state: MATCH_STATE_TO_PRISMA[settled.state], winnerTeamId: settled.winnerId },
         },
-      }),
-    ]);
+      });
+      if (settled.state === "confirmed") {
+        await advanceWinnerToNextRound(tx, {
+          roundId: row.roundId,
+          winnerTeamId: settled.winnerId,
+          groupId: row.groupId,
+        });
+      }
+    });
 
     return NextResponse.json({ id: matchId, state: settled.state, winnerId: settled.winnerId });
   } catch (e) {

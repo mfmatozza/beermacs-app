@@ -229,3 +229,33 @@ does not match UUID's hyphenated shape, so `createTeamInput`,
 `reportResultInput`, `assignTableInput` and the rest would have rejected every
 real id from our own database the moment they were used. Caught before any
 endpoint used them, not after.
+
+---
+
+## D12 — Opening a round is what starts a tournament (REGISTRATION → RUNNING)
+
+Found while live-testing the dispatch pass: `Tournament.status` has a
+`RUNNING` state, and both the dispatch pass (`lib/dispatch.ts`) and the
+read-only dispatch preview gate on it (`status: "RUNNING"`) — but nothing,
+anywhere, ever wrote it. Every tournament created through the API sat in
+`REGISTRATION` forever, which means E-1 through E-3 and E-8 (automatic
+pairing, table assignment, repêchage) could never fire for any real
+tournament. This had gone unnoticed because earlier phase testing wrote
+`Match` rows directly via Prisma scripts rather than through the dispatch
+route.
+
+**Chosen:** `POST /stages/:stageId/rounds/:index/open` (A-13) now flips the
+tournament from `REGISTRATION` to `RUNNING` in the same transaction as the
+round's `NOT_OPENED` → `OPEN` write, the first time it happens. Opening a
+round is already the one explicit admin action that starts scheduling
+matches (A-13's whole point); there is no other natural trigger in the spec,
+and E-7 already frames "before round 1 is opened" as the one pre-tournament
+state.
+
+Verified against real Neon: a fresh tournament stays `REGISTRATION` through
+creation and team sign-up, flips to `RUNNING` on its first round-open call
+(confirmed by direct query), and a second open call on an already-open round
+is a no-op (idempotent, matches `openRound()`'s existing contract).
+
+**Revisit when:** a stage kind needs its own start condition (unlikely —
+group stages create Round 1 the same `NOT_OPENED` way).

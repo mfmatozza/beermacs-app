@@ -6,7 +6,7 @@
 // quietly drifts from the other two.
 
 import type { Match, PendingReport } from "@beermacs/shared";
-import type { MatchState } from "@beermacs/db";
+import type { MatchState, PrismaClient } from "@beermacs/db";
 import { prisma } from "@beermacs/db";
 
 export const MATCH_STATE_TO_DOMAIN: Record<MatchState, Match["state"]> = {
@@ -98,4 +98,52 @@ export async function getPendingReport(matchId: string): Promise<PendingReport |
         : null,
     at: claim.createdAt.toISOString(),
   };
+}
+
+// ── Advancing a winner ───────────────────────────────────────────────────
+//
+// When a match settles, its winner becomes an entrant of the NEXT round —
+// explicitly, here, once. This is rounds.ts's documented model: RoundEntrant
+// rows are never reconstructed from match history, they're written the
+// moment something makes a team eligible for a round. Settling a match is one
+// of those somethings, alongside initial registration and repêchage.
+//
+// The next round's OWN row is created here too if it doesn't exist yet
+// (same upsert-by-index the open-round route uses) but left NOT_OPENED —
+// advancing a winner is not the same thing as opening the round for play;
+// that stays an explicit admin action (A-13).
+//
+// Deliberately does not attempt to detect "this was the final — mark the
+// tournament complete." That needs a signal this function doesn't have (a
+// group stage's promotion is a different mechanism — advanceCount — from a
+// pure elimination stage's "one team left"), and is tracked as open work in
+// docs/ROADMAP.md rather than half-built here.
+//
+// A no-op for a group-stage match (`groupId` set — schema comment: "Set only
+// for group-stage matches"): a group's promotion runs on standings after
+// every match in the group is done, not per-match, so there is nothing for
+// this function to do there.
+
+export async function advanceWinnerToNextRound(
+  tx: Pick<PrismaClient, "round" | "roundEntrant">,
+  match: { roundId: string; winnerTeamId: string | null; groupId: string | null }
+): Promise<void> {
+  if (!match.winnerTeamId || match.groupId) return;
+
+  const round = await tx.round.findUniqueOrThrow({
+    where: { id: match.roundId },
+    select: { stageId: true, index: true },
+  });
+
+  const nextRound = await tx.round.upsert({
+    where: { stageId_index: { stageId: round.stageId, index: round.index + 1 } },
+    create: { stageId: round.stageId, index: round.index + 1, status: "NOT_OPENED" },
+    update: {},
+  });
+
+  await tx.roundEntrant.upsert({
+    where: { roundId_teamId: { roundId: nextRound.id, teamId: match.winnerTeamId } },
+    create: { roundId: nextRound.id, teamId: match.winnerTeamId, viaRepechage: false },
+    update: {},
+  });
 }

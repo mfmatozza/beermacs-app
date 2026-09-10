@@ -8,7 +8,12 @@ import { confirmResultInput, transition } from "@beermacs/shared";
 import { prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
-import { getPendingReport, MATCH_STATE_TO_PRISMA, toDomainMatch } from "@/lib/match-mapping";
+import {
+  advanceWinnerToNextRound,
+  getPendingReport,
+  MATCH_STATE_TO_PRISMA,
+  toDomainMatch,
+} from "@/lib/match-mapping";
 import { HttpError, requireViewer, resolveMatchActor } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -24,6 +29,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
       select: {
         id: true,
         roundId: true,
+        groupId: true,
         position: true,
         homeTeamId: true,
         awayTeamId: true,
@@ -62,8 +68,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     if (!outcome.ok) throw new HttpError(422, outcome.error.kind);
     const { match: next, releasesTable } = outcome.value;
 
-    await prisma.$transaction([
-      prisma.match.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.match.update({
         where: { id: matchId },
         data: {
           state: MATCH_STATE_TO_PRISMA[next.state],
@@ -73,23 +79,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
           venueTableId: next.tableId,
           settledAt: new Date(),
         },
-      }),
-      prisma.matchReport.create({
+      });
+      await tx.matchReport.create({
         data: {
           matchId,
           kind: "CONFIRM",
           actorUserId: viewer.userId,
           teamId: actor.kind === "captain" ? actor.teamId : null,
         },
-      }),
+      });
       // A settled match frees its table for the next pairing (E-3's whole
       // point) — transition() tells us which one via releasesTable; forgetting
       // this write leaves the table BUSY forever even though the match's own
       // venueTableId has already gone back to null.
-      ...(releasesTable
-        ? [prisma.venueTable.update({ where: { id: releasesTable }, data: { state: "OPEN" } })]
-        : []),
-    ]);
+      if (releasesTable) {
+        await tx.venueTable.update({ where: { id: releasesTable }, data: { state: "OPEN" } });
+      }
+      if (next.state === "confirmed") {
+        await advanceWinnerToNextRound(tx, {
+          roundId: row.roundId,
+          winnerTeamId: next.winnerId,
+          groupId: row.groupId,
+        });
+      }
+    });
 
     return NextResponse.json({ id: matchId, state: next.state, winnerId: next.winnerId });
   } catch (e) {

@@ -11,7 +11,11 @@ import { reportResultInput, transition } from "@beermacs/shared";
 import { prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
-import { MATCH_STATE_TO_PRISMA, toDomainMatch } from "@/lib/match-mapping";
+import {
+  advanceWinnerToNextRound,
+  MATCH_STATE_TO_PRISMA,
+  toDomainMatch,
+} from "@/lib/match-mapping";
 import { HttpError, requireViewer, resolveMatchActor } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -27,6 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
       select: {
         id: true,
         roundId: true,
+        groupId: true,
         position: true,
         homeTeamId: true,
         awayTeamId: true,
@@ -64,8 +69,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     // nobody to argue with) — so this may already be CONFIRMED, not
     // "reported", and releasesTable may already be set. Either way the write
     // is the same shape.
-    await prisma.$transaction([
-      prisma.match.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.match.update({
         where: { id: matchId },
         data: {
           state: MATCH_STATE_TO_PRISMA[next.state],
@@ -75,8 +80,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
           venueTableId: next.tableId,
           ...(next.state === "confirmed" ? { settledAt: new Date() } : {}),
         },
-      }),
-      prisma.matchReport.create({
+      });
+      await tx.matchReport.create({
         data: {
           matchId,
           kind: "CLAIM",
@@ -86,11 +91,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
           homeScore: body.score?.home ?? null,
           awayScore: body.score?.away ?? null,
         },
-      }),
-      ...(releasesTable
-        ? [prisma.venueTable.update({ where: { id: releasesTable }, data: { state: "OPEN" } })]
-        : []),
-    ]);
+      });
+      if (releasesTable) {
+        await tx.venueTable.update({ where: { id: releasesTable }, data: { state: "OPEN" } });
+      }
+      // Staff filing a report settles it outright (no one to argue with) —
+      // in that case next.state is already "confirmed" here, same as
+      // ./confirm and ./resolve.
+      if (next.state === "confirmed") {
+        await advanceWinnerToNextRound(tx, {
+          roundId: row.roundId,
+          winnerTeamId: next.winnerId,
+          groupId: row.groupId,
+        });
+      }
+    });
 
     return NextResponse.json({ id: matchId, state: next.state });
   } catch (e) {
