@@ -44,9 +44,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
         awayScore: true,
         venueTableId: true,
         tournamentId: true,
-        tournament: { select: { venueId: true } },
+        tournament: { select: { venueId: true, status: true } },
       },
     });
+    if (row.tournament.status === "COMPLETE") throw new HttpError(409, "tournament_ended");
     const domainMatch = toDomainMatch(row.roundId, row);
 
     const outcome = transition(

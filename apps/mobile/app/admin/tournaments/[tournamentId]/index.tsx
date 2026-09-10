@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ApiError,
@@ -75,6 +75,33 @@ export default function TournamentAdminScreen() {
     [reload]
   );
 
+  const [ending, setEnding] = useState(false);
+  const endTournament = useCallback(() => {
+    Alert.alert(
+      "End this tournament?",
+      "This is final — no more matches, chat, or scheduling. It moves to History for everyone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "End tournament",
+          style: "destructive",
+          onPress: async () => {
+            setEnding(true);
+            setError(null);
+            try {
+              await api.endTournament(tournamentId);
+              await reload();
+            } catch {
+              setError("Couldn't end the tournament. Try again.");
+            } finally {
+              setEnding(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [tournamentId, reload]);
+
   if (!detail && !error) {
     return (
       <View className="flex-1 items-center justify-center bg-stout-900">
@@ -91,13 +118,38 @@ export default function TournamentAdminScreen() {
     >
       {detail ? (
         <>
-          <View className="gap-1">
-            <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
-              {detail.name}
-            </Text>
-            <Text className="font-sans text-[13px] text-cream-dim">
-              Join code {detail.joinCode} · {detail.tables.length} tables
-            </Text>
+          <View className="flex-row items-start justify-between gap-3">
+            <View className="flex-1 gap-1">
+              <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
+                {detail.name}
+              </Text>
+              <Text className="font-sans text-[13px] text-cream-dim">
+                Join code {detail.joinCode} · {detail.tables.length} tables
+              </Text>
+            </View>
+            {detail.status === "COMPLETE" ? (
+              <View className="rounded-full border border-stout-500 px-3 py-1.5">
+                <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+                  Ended
+                </Text>
+              </View>
+            ) : (
+              <Pressable
+                onPress={endTournament}
+                disabled={ending}
+                accessibilityRole="button"
+                accessibilityLabel="End tournament"
+                className={`rounded-full border border-dispute px-3 py-1.5 active:opacity-70 ${ending ? "opacity-40" : ""}`}
+              >
+                {ending ? (
+                  <ActivityIndicator size="small" color={raw.dispute} />
+                ) : (
+                  <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-dispute">
+                    End
+                  </Text>
+                )}
+              </Pressable>
+            )}
           </View>
 
           {error ? (

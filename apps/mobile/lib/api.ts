@@ -214,6 +214,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  endTournament: (tournamentId: string) =>
+    request<{ id: string; status: string }>(`/api/tournaments/${tournamentId}/end`, {
+      method: "POST",
+    }),
   board: (tournamentId: string) =>
     request<TournamentBoard>(`/api/tournaments/${tournamentId}/board`),
   reportMatch: (matchId: string, body: ReportResultInput) =>

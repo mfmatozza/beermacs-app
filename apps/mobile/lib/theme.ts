@@ -25,6 +25,7 @@ export const raw = {
   foam: "#FFFCF5",
   foamShade: "#E4D6BB",
   beer: "#F5A300",
+  dispute: "#E05B45",
   /// Tab bar tints. Icon colours are props, not classes, so `className`
   /// cannot reach them — they have to be values.
   tabActive: "#F5A300",

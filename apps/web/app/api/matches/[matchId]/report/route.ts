@@ -45,9 +45,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
         awayScore: true,
         venueTableId: true,
         tournamentId: true,
-        tournament: { select: { venueId: true, config: true } },
+        tournament: { select: { venueId: true, config: true, status: true } },
       },
     });
+    if (row.tournament.status === "COMPLETE") throw new HttpError(409, "tournament_ended");
 
     const actor = await resolveMatchActor(
       viewer,

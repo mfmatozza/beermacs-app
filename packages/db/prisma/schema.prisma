@@ -264,6 +264,9 @@ model Tournament {
   joinCode String @unique
 
   startsAt DateTime?
+  /// Set the moment an admin ends the tournament (status -> COMPLETE).
+  /// Terminal and one-way — nothing ever clears this.
+  endedAt  DateTime?
 
   /// Tunable knobs beyond the structural `format`: playersPerTeam (A-1),
   /// chatEnabled (A-2), autoRepechageMode (A-10's default for E-8),
