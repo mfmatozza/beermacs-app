@@ -15,6 +15,7 @@ import {
   MATCH_STATE_TO_PRISMA,
   toDomainMatch,
 } from "@/lib/match-mapping";
+import { sendNotifyIntents } from "@/lib/notify";
 import { HttpError, requireVenueRoleForMatch } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -42,6 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
         awayScore: true,
         venueTableId: true,
         tournamentId: true,
+        tournament: { select: { venueId: true } },
       },
     });
     const domainMatch = toDomainMatch(row.roundId, row);
@@ -67,7 +69,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
       throw new HttpError(422, code);
     }
 
-    const { match: settled, releasesTable } = outcome.value;
+    const { match: settled, releasesTable, notify } = outcome.value;
 
     await prisma.$transaction(async (tx) => {
       await tx.match.update({
@@ -102,6 +104,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
         });
       }
     });
+
+    await sendNotifyIntents(notify, { venueId: row.tournament.venueId });
 
     return NextResponse.json({ id: matchId, state: settled.state, winnerId: settled.winnerId });
   } catch (e) {

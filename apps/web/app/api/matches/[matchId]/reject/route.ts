@@ -9,6 +9,7 @@ import { prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
 import { getPendingReport, MATCH_STATE_TO_PRISMA, toDomainMatch } from "@/lib/match-mapping";
+import { sendNotifyIntents } from "@/lib/notify";
 import { HttpError, requireViewer, resolveMatchActor } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -60,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     );
 
     if (!outcome.ok) throw new HttpError(422, outcome.error.kind);
-    const { match: next } = outcome.value;
+    const { match: next, notify } = outcome.value;
 
     await prisma.$transaction([
       prisma.match.update({
@@ -77,6 +78,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
         },
       }),
     ]);
+
+    await sendNotifyIntents(notify, { venueId: row.tournament.venueId });
 
     return NextResponse.json({ id: matchId, state: next.state });
   } catch (e) {

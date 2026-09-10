@@ -244,3 +244,15 @@ export const sendAdminMessageInput = z
     message: "Target either a team or a person, not both",
   });
 export type SendAdminMessageInput = z.infer<typeof sendAdminMessageInput>;
+
+/**
+ * Payload for POST /api/push/register (U-15..U-17). Re-registering an
+ * existing token re-points it at whoever is signed in now — a shared or
+ * reinstalled device should notify its current owner, not whoever last
+ * registered it.
+ */
+export const pushRegisterInput = z.object({
+  expoPushToken: z.string().min(1),
+  platform: z.enum(["IOS", "ANDROID"]),
+});
+export type PushRegisterInput = z.infer<typeof pushRegisterInput>;

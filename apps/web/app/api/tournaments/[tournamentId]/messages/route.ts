@@ -11,13 +11,12 @@
 // owner-only action.
 //
 // A-19: "all admin messages trigger a push notification for the recipients."
-// Push isn't built yet (docs/ROADMAP.md phase 5) — this is the hook point,
-// marked rather than faked.
 
 import { sendAdminMessageInput } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
+import { sendAdminMessagePush } from "@/lib/notify";
 import { HttpError, requireVenueRole } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -77,9 +76,14 @@ export async function POST(
       data: { channelId: channel.id, authorId: viewer.userId, body: body.body },
     });
 
-    // TODO(phase 5, push): notify the resolved recipient set — the team's
-    // members, the one recipientUserId, or every player at this venue's
-    // tournament — via the Expo push route once it exists.
+    await sendAdminMessagePush(
+      body.teamId
+        ? { kind: "team", teamId: body.teamId }
+        : body.recipientUserId
+          ? { kind: "direct", userId: body.recipientUserId }
+          : { kind: "broadcast", tournamentId },
+      body.body
+    );
 
     return NextResponse.json({ id: message.id, channelId: channel.id, channelKind: channel.kind });
   } catch (e) {

@@ -220,4 +220,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  registerDevice: (expoPushToken: string, platform: "IOS" | "ANDROID") =>
+    request<{ id: string }>("/api/push/register", {
+      method: "POST",
+      body: JSON.stringify({ expoPushToken, platform }),
+    }),
 };

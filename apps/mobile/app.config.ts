@@ -13,6 +13,7 @@ const API_URL: Record<typeof APP_ENV, string> = {
 const config: ExpoConfig = {
   name: APP_ENV === "production" ? "Beermacs" : `Beermacs (${APP_ENV})`,
   slug: "beermacs",
+  owner: "mfmatozza",
   scheme: "beermacs",
   version: "0.1.0",
   orientation: "portrait",
@@ -45,6 +46,7 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-font",
     "expo-secure-store",
+    "expo-notifications",
     [
       "expo-splash-screen",
       {
@@ -58,6 +60,9 @@ const config: ExpoConfig = {
   extra: {
     apiUrl: API_URL[APP_ENV],
     appEnv: APP_ENV,
+    eas: {
+      projectId: "26a3322e-21d5-465d-9815-14b3da9e1bf4",
+    },
   },
   experiments: {
     typedRoutes: true,

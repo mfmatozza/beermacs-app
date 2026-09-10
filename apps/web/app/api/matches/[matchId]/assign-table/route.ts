@@ -3,13 +3,14 @@
 // VENUE_STAFF+. Runs through transition()'s "assign_table" event, same as
 // everything else here: this refuses a match with an empty slot (E-2 only
 // ever assigns matches that are actually playable) and sends the
-// "you're up" notify intent, which will drive the push in phase 5.
+// "you're up" notify intent (A-17/U-15) to both teams.
 
 import { assignTableInput, transition } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
 import { MATCH_STATE_TO_PRISMA, toDomainMatch } from "@/lib/match-mapping";
+import { sendNotifyIntents } from "@/lib/notify";
 import { HttpError, requireVenueRoleForMatch } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -56,7 +57,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     );
 
     if (!outcome.ok) throw new HttpError(422, outcome.error.kind);
-    const { match: next } = outcome.value;
+    const { match: next, notify } = outcome.value;
 
     await prisma.$transaction([
       prisma.match.update({
@@ -65,6 +66,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
       }),
       prisma.venueTable.update({ where: { id: body.tableId }, data: { state: "BUSY" } }),
     ]);
+
+    await sendNotifyIntents(notify, { venueId: row.tournament.venueId, tableLabel: table.label });
 
     return NextResponse.json({ id: matchId, tableId: body.tableId, state: next.state });
   } catch (e) {

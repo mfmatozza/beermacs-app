@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   createTournamentInput,
   joinTournamentInput,
+  pushRegisterInput,
   registerInput,
   reportResultInput,
   sendAdminMessageInput,
@@ -161,5 +162,23 @@ describe("sendAdminMessageInput", () => {
     assert.throws(() =>
       sendAdminMessageInput.parse({ body: "hi", teamId: "t1", recipientUserId: "u1" })
     );
+  });
+});
+
+describe("pushRegisterInput", () => {
+  it("accepts a real-shaped Expo token on either platform", () => {
+    const r = pushRegisterInput.parse({
+      expoPushToken: "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+      platform: "IOS",
+    });
+    assert.strictEqual(r.platform, "IOS");
+  });
+
+  it("rejects an empty token", () => {
+    assert.throws(() => pushRegisterInput.parse({ expoPushToken: "", platform: "ANDROID" }));
+  });
+
+  it("rejects a platform outside IOS/ANDROID", () => {
+    assert.throws(() => pushRegisterInput.parse({ expoPushToken: "t", platform: "WEB" }));
   });
 });

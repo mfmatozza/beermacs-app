@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { isCompleteJoinCode, joinCodeLength, normaliseJoinCode } from "@beermacs/shared";
 import { ApiError, api } from "../lib/api";
 import { nearbyVenues, news, viewer } from "../lib/fixtures";
+import { registerForPush } from "../lib/push";
 import { raw, TAB_BAR_HEIGHT } from "../lib/theme";
 import AmbientBeer from "./AmbientBeer";
 import GlowLogo from "./GlowLogo";
@@ -49,6 +50,12 @@ export default function HomeScreen() {
     try {
       await api.join({ code, displayName: viewer.displayName });
       setCode("");
+      // Ask for notification permission right here, not at sign-up — this is
+      // the first moment the app has something worth paging you about (U-15:
+      // "you have to play"), which is exactly the placement
+      // docs/APP_STORE_COMPLIANCE.md's push section calls for over asking on
+      // first launch before the user has done anything.
+      void registerForPush();
     } catch (e) {
       setJoinError(joinErrorMessage(e instanceof ApiError ? e.code : "unknown"));
     } finally {

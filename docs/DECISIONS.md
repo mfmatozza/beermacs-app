@@ -259,3 +259,51 @@ is a no-op (idempotent, matches `openRound()`'s existing contract).
 
 **Revisit when:** a stage kind needs its own start condition (unlikely —
 group stages create Round 1 the same `NOT_OPENED` way).
+
+---
+
+## D13 — Push notifications: Expo's HTTP endpoint, not expo-server-sdk; permission asked for at join, not sign-up
+
+Phase 5 (U-15..U-17, A-17), built mirroring astra-app's own push implementation
+(docs/ARCHITECTURE.md already named the mechanism; this just built it):
+
+- **Transport**: a hand-rolled `fetch` to `https://exp.host/--/api/v2/push/send`
+  (`apps/web/lib/push.ts`), not the `expo-server-sdk` package — one HTTP call,
+  no dependency, same as astra. Chunked by 100 tokens per Expo's own limit.
+- **Intent → audience**: `transition()` already emits a pure `NotifyIntent[]`
+  (who to tell, not how) — `apps/web/lib/notify.ts` is the one place that
+  turns that into an actual token list and a push, so every route that calls
+  `transition()` (report/confirm/reject/resolve/assign-table) reaches the
+  same copy and the same audience resolution. The automatic dispatch pass
+  (`lib/dispatch.ts`) doesn't go through `transition()` for its table
+  assignment (no staff actor behind an automated pass), so it constructs the
+  same `youre_up` intent by hand rather than duplicating the send logic.
+- **Mobile**: `expo-notifications`/`expo-device` loaded lazily inside
+  `registerForPush()` (`apps/mobile/lib/push.ts`), matching astra — a dev
+  client built before these were added must not crash on boot, only no-op
+  until rebuilt. Verified on-device: the current (pre-rebuild) simulator dev
+  client boots cleanly despite the native module not being compiled in yet.
+
+**Where permission gets requested — corrected mid-build.** The first pass
+called `registerForPush()` from the root layout whenever `signedIn` became
+true, which fires at fresh registration — i.e. before the user has done
+anything, exactly what this repo's own `docs/APP_STORE_COMPLIANCE.md` push
+section says not to do ("not on first launch before the user has done
+anything... right after joining a tournament, framed as 'know when your
+table's ready'"). Moved the call to `HomeScreen`'s `join()` handler, right
+after `api.join()` succeeds — the first moment in the app there's actually
+something worth paging the player about. A returning user whose permission
+is already granted sees no new prompt either way (`getPermissionsAsync()`
+short-circuits before `requestPermissionsAsync()`), so this only changes
+when the _first-ever_ prompt appears.
+
+**Not solved**: a device that reinstalls or has its token rotated without
+ever joining a new tournament in that session stops receiving pushes
+silently — nothing re-registers its token outside the join flow. Rare
+enough (and safe enough — no compliance risk either way) not to build a
+second call site for yet.
+
+**Revisit when:** a real device build with APNs credentials exists — nothing
+here has been verified past Expo's HTTP endpoint accepting/rejecting the
+send; actual delivery to a phone needs `eas credentials` set up with a real
+Apple Developer APNs key, which is a user action, not a code one.

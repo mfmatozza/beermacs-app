@@ -16,6 +16,7 @@ import {
   MATCH_STATE_TO_PRISMA,
   toDomainMatch,
 } from "@/lib/match-mapping";
+import { sendNotifyIntents } from "@/lib/notify";
 import { HttpError, requireViewer, resolveMatchActor } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -63,7 +64,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     );
 
     if (!outcome.ok) throw new HttpError(422, outcome.error.kind);
-    const { match: next, releasesTable } = outcome.value;
+    const { match: next, releasesTable, notify } = outcome.value;
 
     // If staff filed the report, transition() settles it outright (there is
     // nobody to argue with) — so this may already be CONFIRMED, not
@@ -106,6 +107,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
         });
       }
     });
+
+    await sendNotifyIntents(notify, { venueId: row.tournament.venueId });
 
     return NextResponse.json({ id: matchId, state: next.state });
   } catch (e) {

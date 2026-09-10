@@ -26,11 +26,13 @@ import {
   planDispatch,
   randomPairs,
   waitingTeams,
+  type NotifyIntent,
   type Round as DomainRound,
   type VenueTable as DomainTable,
 } from "@beermacs/shared";
 import { prisma } from "@beermacs/db";
 import { MATCH_SELECT, toDomainMatch } from "./match-mapping";
+import { sendNotifyIntents } from "./notify";
 
 export interface DispatchSummary {
   readonly newMatches: number;
@@ -161,6 +163,9 @@ export async function runDispatchPass(venueId: string): Promise<DispatchSummary>
     domainTables
   );
 
+  const matchById = new Map(allMatches.map((m) => [m.id, m]));
+  const tableById = new Map(allTables.map((t) => [t.id, t]));
+
   let tableAssignments = 0;
   for (const { matchId, tableId } of plan.assignments) {
     const claimed = await prisma.venueTable.updateMany({
@@ -174,6 +179,18 @@ export async function runDispatchPass(venueId: string): Promise<DispatchSummary>
       data: { state: "ON_TABLE", venueTableId: tableId, calledAt: new Date() },
     });
     tableAssignments += 1;
+
+    // Same "you're up" intent transition()'s assign_table event would have
+    // produced (A-17/U-15) — this path doesn't go through transition() since
+    // there's no staff actor behind an automatic dispatch pass, only the
+    // conditional table claim above.
+    const match = matchById.get(matchId);
+    const table = tableById.get(tableId);
+    const teams = [match?.homeTeamId, match?.awayTeamId].filter((t): t is string => t !== null);
+    if (teams.length > 0) {
+      const notify: NotifyIntent[] = [{ kind: "youre_up", teams, tableId }];
+      await sendNotifyIntents(notify, { venueId, tableLabel: table?.label ?? null });
+    }
   }
 
   return { newMatches, autoRepechages, tableAssignments };

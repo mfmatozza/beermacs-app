@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import PourScreen from "../components/PourScreen";
 import RegisterScreen from "../components/RegisterScreen";
+import { attachNotificationRouting } from "../lib/push";
 import { useSessionStore } from "../lib/session-store";
 import { raw } from "../lib/theme";
 import { useAppBoot } from "../lib/use-app-boot";
@@ -25,6 +26,7 @@ const queryClient = new QueryClient();
  */
 export default function RootLayout() {
   const { ready } = useAppBoot();
+  const router = useRouter();
   const signedIn = useSessionStore((s) => s.signedIn);
   const setSignedIn = useSessionStore((s) => s.setSignedIn);
   const [poured, setPoured] = useState(false);
@@ -42,6 +44,15 @@ export default function RootLayout() {
     const sub = AppState.addEventListener("change", onAppStateChange);
     return () => sub.remove();
   }, []);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    let detach: (() => void) | undefined;
+    void attachNotificationRouting(() => router.push("/bracket")).then((off) => {
+      detach = off;
+    });
+    return () => detach?.();
+  }, [signedIn, router]);
 
   // Nothing that draws text may mount before the fonts are registered.
   //

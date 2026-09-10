@@ -172,10 +172,31 @@ order it was actually built:
    points rule for `advanceCount`, so building one would be inventing a
    requirement, not implementing one.
 
-## Phase 5 — push (U-15..U-17)
+## Phase 5 — push (U-15..U-17, A-17) (done, pending real credentials)
 
-`expo-notifications` and one route handler. "You're up — Table 3" first; new
-match-chat message and admin message follow once chat ships.
+`apps/web/lib/push.ts` (Expo's HTTP endpoint) + `lib/notify.ts` (turns a
+`transition()` result's `NotifyIntent[]` into an actual send) wired into
+every route that settles or assigns a match, plus the automatic dispatch
+pass and the admin-message broadcast (A-19) — see D13 for the shape and for
+the permission-timing correction made mid-build. `POST /api/push/register`
+upserts a `Device` row by token.
+
+Verified against real Neon and Expo's real endpoint: every `NotifyIntent`
+kind (`youre_up`, `confirm_result`, `result_settled`, `staff_needed`) and
+the admin broadcast fire a real HTTP call and handle Expo's response
+correctly (accepted/failed/error-message parsing) without ever failing the
+request that triggered them, using a syntactically-valid-but-fake Expo
+token — Expo's own `DeviceNotRegistered` response is exactly what a real
+send would get from an uninstalled app, so this is a real exercise of the
+failure path, not just the happy one.
+
+**What's NOT verified, and can't be from here**: actual delivery to a
+phone. That needs a real APNs key uploaded to EAS credentials
+(`eas credentials`, an Apple Developer account action) and a build made
+with it — `docs/APP_STORE_COMPLIANCE.md`'s push checklist already names
+this as a prerequisite, not new information. Chat's own push (U-16) is a
+trivial extension of the same `sendNotifyIntents`/`sendPushToTokens` pair
+once Phase 6 exists; nothing about this phase's design blocks it.
 
 ## Phase 6 — chat (U-8..U-10)
 
