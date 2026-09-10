@@ -8,6 +8,8 @@ import type {
   CreateTeamInput,
   CreateTournamentInput,
   JoinTournamentInput,
+  RejectResultInput,
+  ReportResultInput,
   SetRoundSchedulingInput,
 } from "@beermacs/shared";
 import { authClient } from "./auth-client";
@@ -114,6 +116,62 @@ export interface TournamentDetail {
   readonly tables: readonly { id: string; label: string; state: string; sortOrder: number }[];
 }
 
+// ── The public board (U-7/E-5) ───────────────────────────────────────────
+
+export type MatchStateName =
+  "scheduled" | "queued" | "on_table" | "reported" | "disputed" | "confirmed";
+
+export interface BoardTeam {
+  readonly teamId: string;
+  readonly name: string;
+  readonly viaRepechage: boolean;
+}
+
+export interface BoardPendingReport {
+  readonly reportedByTeamId: string;
+  readonly winnerId: string;
+  readonly score: { home: number; away: number } | null;
+  readonly at: string;
+}
+
+export interface BoardMatch {
+  readonly id: string;
+  readonly position: number;
+  readonly state: MatchStateName;
+  readonly home: BoardTeam | null;
+  readonly away: BoardTeam | null;
+  readonly winnerTeamId: string | null;
+  readonly score: { home: number; away: number } | null;
+  readonly tableLabel: string | null;
+  readonly pendingReport: BoardPendingReport | null;
+}
+
+export interface BoardRound {
+  readonly id: string;
+  readonly index: number;
+  readonly status: "open" | "not_opened";
+  /** Teams belonging to this round with no match yet — just added, or
+   *  repêchaged, and not yet paired (E-6/E-7). */
+  readonly entrantTeamIds: readonly string[];
+  readonly matches: readonly BoardMatch[];
+}
+
+export interface BoardStage {
+  readonly id: string;
+  readonly type: "GROUP" | "ELIMINATION";
+  readonly order: number;
+  readonly rounds: readonly BoardRound[];
+}
+
+export interface TournamentBoard {
+  readonly id: string;
+  readonly name: string;
+  readonly format: string;
+  readonly status: string;
+  readonly config: { cupsToWin: number | null; playersPerTeam: number | null };
+  readonly stages: readonly BoardStage[];
+}
+
 export const api = {
   me: () => request<MeResponse>("/api/me"),
   join: (body: JoinTournamentInput) =>
@@ -142,6 +200,23 @@ export const api = {
     ),
   setRoundScheduling: (roundId: string, body: SetRoundSchedulingInput) =>
     request<{ id: string; schedulingPaused: boolean }>(`/api/rounds/${roundId}/scheduling`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  board: (tournamentId: string) =>
+    request<TournamentBoard>(`/api/tournaments/${tournamentId}/board`),
+  reportMatch: (matchId: string, body: ReportResultInput) =>
+    request<{ id: string; state: MatchStateName }>(`/api/matches/${matchId}/report`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  confirmMatch: (matchId: string) =>
+    request<{ id: string; state: MatchStateName; winnerId: string | null }>(
+      `/api/matches/${matchId}/confirm`,
+      { method: "POST", body: JSON.stringify({}) }
+    ),
+  rejectMatch: (matchId: string, body: RejectResultInput) =>
+    request<{ id: string; state: MatchStateName }>(`/api/matches/${matchId}/reject`, {
       method: "POST",
       body: JSON.stringify(body),
     }),

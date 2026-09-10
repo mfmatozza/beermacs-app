@@ -106,7 +106,7 @@ order it was actually built:
    exists); once one does, PATCH returns format_locked_after_first_match and
    the config knobs remain freely editable.
 
-## Phase 4 — the live loop (E-1..E-8, U-5..U-7)
+## Phase 4 — the live loop (E-1..E-8, U-5..U-7) (done)
 
 1. **The result flow** (U-11..U-14, done) — `report`/`confirm`/`reject` for
    the two-captain path, `resolve` for staff force-settle, all through the
@@ -128,9 +128,49 @@ order it was actually built:
    returns to OPEN — for both the resolve path and the report/confirm path.
    Finding this required first fixing D12 (nothing transitioned a tournament
    to `RUNNING`, which the dispatch pass gates on).
-- The public bracket/standings view (U-7, E-5), updating as matches are
-  assigned and confirmed.
-- "Who I play, when, which table" on the player's own screen (U-5/U-6).
+3. **The public bracket, and "my match"** (U-5..U-7, E-5, done) — one screen,
+   `app/(tabs)/bracket.tsx`: my own match (if I have one in this tournament)
+   above the round-by-round bracket list, per the tab-order rationale
+   already in `_layout.tsx` ("where is my match" sits left of Home, not on
+   it). Backed by a new read, `GET /tournaments/:id/board` — any signed-in
+   viewer, not just this venue's staff, since E-5 says "visible to
+   everyone" and the existing tournament-detail route is deliberately the
+   staff-only night-of console (see its own doc comment). First screen in
+   the app using `@tanstack/react-query` (now a mobile dependency, matching
+   astra-app's own choice) — `refetchInterval: 3000`, per this doc's own
+   "Open: how live updates work" recommendation below. `NextUpCard` was
+   rewritten from a two-state (`live` / not) component into a full
+   discriminated union over all six match states plus "waiting to be
+   paired" (a round entrant with no match yet, E-6/E-7) — the old version
+   would have shown "waiting for a table" text for a disputed or reported
+   match, which is wrong.
+
+   Verified against real Neon on-device (iOS Simulator, real account): the
+   populated screen renders correctly end to end — tournament name, my
+   team's on-table card with the right table and opponent, the round list
+   with the right state pills. The report/confirm/dispute button presses
+   themselves were verified through the same direct API calls Phase 4.1
+   used (curl against `/report`, `/confirm`, `/resolve`), not through a
+   simulator tap — this session's simulator UI automation does not reliably
+   deliver a touch to a `Pressable` inside `GestureHandlerRootView` (tab-bar
+   taps land; taps on nested buttons inside a scroll view don't), a
+   limitation to keep in mind rather than something this phase could fix.
+
+   Scoped out on purpose: a spectator with no team of their own in a
+   tournament currently sees "you're not in a tournament" rather than the
+   bracket — resolving "which tournament am I watching" without a team
+   requires recording that a join-code use was for _this_ tournament
+   specifically, which nothing today persists (the join route only writes a
+   venue-level `PLAYER` membership); and the team-creation UI itself (U-2)
+   that would normally follow a join doesn't exist as a mobile screen yet
+   either. Both are Phase 2 gaps this phase surfaced but didn't take on. A
+   venue-wide table strip / dispatch queue for players was also deliberately
+   left out — that is the staff night-of console's job (already built), not
+   what U-6 asks for (a player's own table, which the my-match card already
+   shows). Group-stage standings render as a flat per-round match list, not
+   a computed points/standings table — the spec never defines a tiebreak or
+   points rule for `advanceCount`, so building one would be inventing a
+   requirement, not implementing one.
 
 ## Phase 5 — push (U-15..U-17)
 
