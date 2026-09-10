@@ -15,22 +15,13 @@
 //      exist rather than replacing the venue's table set.
 
 import { createTournamentInput, generateJoinCode } from "@beermacs/shared";
-import { Role, TournamentFormatKind, prisma } from "@beermacs/db";
+import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
 import { requireVenueRole } from "@/lib/session";
+import { FORMAT_TO_PRISMA, stagesFor } from "@/lib/tournament-format";
 
 export const runtime = "nodejs";
-
-const FORMAT_TO_PRISMA: Record<string, TournamentFormatKind> = {
-  single_elimination: "SINGLE_ELIMINATION",
-  group_then_knockout: "GROUP_THEN_KNOCKOUT",
-  triangular: "TRIANGULAR",
-};
-
-/** Group-then-knockout's top-N-per-group cutoff. Not yet admin-configurable —
- *  a reasonable default until stage management gets its own screen. */
-const DEFAULT_ADVANCE_COUNT = 2;
 
 async function uniqueJoinCode(): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -89,24 +80,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ venueId
         },
       });
 
-      interface StagePlan {
-        type: "GROUP" | "ELIMINATION";
-        order: number;
-        advanceCount: number | null;
-      }
-      const stagesToCreate: StagePlan[] =
-        body.format === "group_then_knockout"
-          ? [
-              { type: "GROUP", order: 0, advanceCount: DEFAULT_ADVANCE_COUNT },
-              { type: "ELIMINATION", order: 1, advanceCount: null },
-            ]
-          : [
-              {
-                type: body.format === "triangular" ? "GROUP" : "ELIMINATION",
-                order: 0,
-                advanceCount: null,
-              },
-            ];
+      const stagesToCreate = stagesFor(body.format);
 
       const firstStage = await tx.stage.create({
         data: { tournamentId: created.id, ...stagesToCreate[0]! },

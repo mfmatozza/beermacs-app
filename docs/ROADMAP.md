@@ -58,9 +58,10 @@ enough.
 - Create a team, name it, invite teammates by code/QR/link (U-2/U-3). Team size
   is whatever the admin set (A-1/U-4), not fixed by the app.
 
-## Phase 3 — the admin console (A-1..A-21)
+## Phase 3 — the admin console (A-1..A-21) (done)
 
-The largest remaining chunk of screens. In build order:
+Every item below is built and verified against Neon, not just typed. In the
+order it was actually built:
 
 1. **Create a tournament** (done) — format (A-5), team size, chat on/off
    (A-2), table count and labels (A-3/A-4). `POST /api/venues/:id/tournaments`
@@ -95,8 +96,15 @@ The largest remaining chunk of screens. In build order:
    tournament-scoped and ChatChannel.tournamentId is non-nullable by schema).
    VENUE_STAFF+, matching the existing staff chat access (U-10/A-20). Push on
    send is a marked TODO for phase 5, not faked.
-7. **Format change mid-tournament** (A-6) — a field update per D9, but the UI
-   has to make clear what happens to matches already in flight.
+7. **Format change mid-tournament** (A-6, done) — config knobs (team size,
+   chat, scoring, timeout, repêchage mode) are always a safe field update.
+   The structural `format` itself is different: changing it means a
+   different Stage shape, and this does not attempt to migrate live matches
+   onto a new one — that is real, unscoped work (what happens to a group
+   stage's standings if the format becomes single elimination mid-way?). So
+   format may only change while nothing has been played yet (no Match row
+   exists); once one does, PATCH returns format_locked_after_first_match and
+   the config knobs remain freely editable.
 
 ## Phase 4 — the live loop (E-1..E-8, U-5..U-7)
 
