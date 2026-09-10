@@ -56,3 +56,4 @@ Icon
 
 # === Vercel ===
 .vercel
+.env*

@@ -1,41 +1,33 @@
 import { Canvas, Fill, Shader, Skia } from "@shopify/react-native-skia";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
-import {
-  Easing,
-  useDerivedValue,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
 import { AMBIENT_SHADER } from "../lib/ambient-shader";
 
 /** Compiled once for the process. */
 const effect = Skia.RuntimeEffect.Make(AMBIENT_SHADER);
 
+/** Frozen at a single instant — see the module doc below for why. Any value
+ *  works: the bubble field is a hash-seeded lattice, uniform in density over
+ *  time, so t=0 looks exactly as "mid-drift" as any other moment. */
+const FROZEN_TIME = 0;
+
 /**
  * The app's background: a warm amber glow with beer particles drifting up it.
  *
  * Absolutely positioned behind everything, and `pointerEvents="none"` so it
- * never eats a touch. Runs entirely on the UI thread — the clock is a Reanimated
- * shared value, so not one frame crosses to JS.
+ * never eats a touch. A single static render, not an animation: this shader
+ * used to be driven by a Reanimated clock ticking every frame for the app's
+ * entire lifetime, which meant Skia repainted the full-screen canvas on
+ * every frame everywhere in the app, purely for ambience sitting behind the
+ * UI. Freezing `u_time` cuts that to one render per resize.
  */
 export default function AmbientBeer() {
   const { width, height } = useWindowDimensions();
 
-  const clock = useSharedValue(0);
-  useEffect(() => {
-    clock.value = withRepeat(
-      withTiming(3600, { duration: 3_600_000, easing: Easing.linear }),
-      -1,
-      false
-    );
-  }, [clock]);
-
-  const uniforms = useDerivedValue(() => ({
-    u_res: [width, height],
-    u_time: clock.value,
-  }));
+  const uniforms = useMemo(
+    () => ({ u_res: [width, height], u_time: FROZEN_TIME }),
+    [width, height]
+  );
 
   const dims = useMemo(() => ({ width, height }), [width, height]);
 
