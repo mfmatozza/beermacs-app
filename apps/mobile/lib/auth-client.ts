@@ -4,12 +4,13 @@
 // not AsyncStorage — it is a bearer credential, and AsyncStorage is plain text
 // readable by anything with filesystem access on a rooted device.
 //
-// Players sign in anonymously (docs/DECISIONS.md D3): the app opens, gets a real
-// session, and nobody sees a sign-up form. Staff sign in with email + password.
+// One account type for everyone (docs/DECISIONS.md D10): email + password +
+// phone, whether you're a player or a venue owner. No anonymous sign-in — the
+// spec requires contact details from every user (G-1), so there is nothing an
+// anonymous session could usefully skip past any more.
 
 import { expoClient } from "@better-auth/expo/client";
 import { createAuthClient } from "better-auth/react";
-import { anonymousClient } from "better-auth/client/plugins";
 import * as SecureStore from "expo-secure-store";
 import { API_URL } from "./config";
 
@@ -21,29 +22,22 @@ export const authClient = createAuthClient({
       storagePrefix: "beermacs",
       storage: SecureStore,
     }),
-    anonymousClient(),
   ],
 });
 
 /**
- * Make sure this device has a session, creating an anonymous one if not.
- *
- * Idempotent and safe to call on every boot: an existing session short-circuits.
- * Returns false when the API is unreachable, so the caller can carry on in a
- * degraded state rather than blocking the whole app on a bar's wifi.
+ * Whether this device already has a session. Never creates one — registration
+ * (email/password/phone) is now an explicit screen, not something boot can
+ * paper over. Returns false both when there's genuinely no session and when
+ * the API couldn't be reached, which the caller treats the same way: show the
+ * registration/sign-in screen.
  */
-export async function ensureSession(): Promise<boolean> {
+export async function hasStoredSession(): Promise<boolean> {
   try {
     const existing = await authClient.getSession();
-    if (existing.data?.session) return true;
-    const created = await authClient.signIn.anonymous();
-    if (__DEV__ && created.error) console.warn("[auth] anonymous sign-in failed:", created.error);
-    return !created.error;
+    return Boolean(existing.data?.session);
   } catch (e) {
-    // A missing native module surfaces here as a bare "Cannot find module",
-    // which is otherwise indistinguishable from being offline — @better-auth/expo
-    // marks its expo-* peers optional but needs expo-network at runtime.
-    if (__DEV__) console.warn("[auth] ensureSession threw:", String(e));
+    if (__DEV__) console.warn("[auth] session check threw:", String(e));
     return false;
   }
 }

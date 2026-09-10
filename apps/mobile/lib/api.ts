@@ -47,7 +47,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // because they are response shapes, not rules — see docs/ARCHITECTURE.md.
 
 export interface MeResponse {
-  readonly user: { id: string; displayName: string; isAnonymous: boolean };
+  readonly user: { id: string; displayName: string; email: string; phone: string };
   readonly memberships: readonly {
     role: string;
     venue: { id: string; name: string; slug: string; city: string | null };

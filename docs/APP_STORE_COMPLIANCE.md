@@ -26,10 +26,10 @@ after a rejection.
 
 ## Account & data
 
-- [ ] **Guideline 5.1.1(v) — in-app account deletion.** Not "email us to
-      delete your account" — a control inside the app (Profile tab) that
-      actually deletes the account and its personal data. This is a hard
-      requirement now that signup is mandatory (G-1), not a nice-to-have.
+- [x] **Guideline 5.1.1(v) — in-app account deletion.** Built — Profile tab,
+      confirms the current password, calls Better Auth's delete-user, signs
+      the device out on success. Verified against Neon: the User row is gone
+      afterward, not just the session.
 - [ ] **Privacy policy accuracy.** `apps/web/app/privacy` must say plainly:
       we collect email and phone at signup; venue admins can see a player's
       email/phone (A-21, to re-contact for future nights); how to delete an

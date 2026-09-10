@@ -1,4 +1,3 @@
-import { timing } from "./theme";
 // Deep imports, not the package barrels. `@expo-google-fonts/dm-sans` has no
 // `exports` map and its index requires every weight it ships, so importing three
 // named exports from the barrel drags all eighteen .ttf files (~1MB) into the
@@ -10,23 +9,22 @@ import { DMSans_700Bold } from "@expo-google-fonts/dm-sans/700Bold";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
-import { ensureSession } from "./auth-client";
+import { hasStoredSession } from "./auth-client";
+import { useSessionStore } from "./session-store";
+import { timing } from "./theme";
 
 void SplashScreen.preventAutoHideAsync();
 
 /**
- * Everything that must be true before the app is worth showing.
- *
- * Right now that's fonts. In phase 2 it also becomes: session restored, venue
- * resolved, tonight's tournament fetched. The shape is deliberately a single
- * `ready` boolean so the pour screen never has to learn what it's waiting for.
+ * Everything that must be true before the app is worth showing: fonts loaded,
+ * and whether this device already has a session. The shape is deliberately a
+ * few booleans rather than a state machine so the pour screen never has to
+ * learn what it's waiting for — it just watches `ready`.
  */
 export interface AppBoot {
   readonly ready: boolean;
   /** Set when boot failed but we're proceeding anyway, for a toast later. */
   readonly degraded: string | null;
-  /** False when we could not reach the API — bar wifi, usually. */
-  readonly online: boolean;
 }
 
 export function useAppBoot(): AppBoot {
@@ -38,30 +36,35 @@ export function useAppBoot(): AppBoot {
   });
 
   const [timedOut, setTimedOut] = useState(false);
-  const [online, setOnline] = useState(true);
+  const signedIn = useSessionStore((s) => s.signedIn);
+  const setSignedIn = useSessionStore((s) => s.setSignedIn);
 
-  // Make sure the device has a session, creating an anonymous one if not.
-  // Deliberately NOT part of `ready`: a bar's wifi should not be able to hold
-  // the app on a splash screen. If this fails the app still opens, and the
-  // screens that need a session say so.
   useEffect(() => {
     let cancelled = false;
-    void ensureSession().then((ok) => {
-      if (!cancelled) setOnline(ok);
+    void hasStoredSession().then((ok) => {
+      if (!cancelled) setSignedIn(ok);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Never hang on boot. If a font CDN or a cold cache is being slow, show the
-  // app in the fallback face rather than holding a splash screen forever.
+  // Never hang on boot. If a font CDN or a cold cache is being slow — or the
+  // session check hangs on bad wifi — show the app (falling through to the
+  // registration screen) rather than holding a splash screen forever.
   useEffect(() => {
     const id = setTimeout(() => setTimedOut(true), timing.bootTimeoutMs);
     return () => clearTimeout(id);
   }, []);
 
-  const ready = fontsLoaded || fontError !== null || timedOut;
+  useEffect(() => {
+    if (timedOut && signedIn === null) setSignedIn(false);
+  }, [timedOut, signedIn, setSignedIn]);
+
+  const fontsSettled = fontsLoaded || fontError !== null || timedOut;
+  // The timeout effect above guarantees signedIn is non-null by the time
+  // timedOut flips, so this alone is a sufficient (and simpler) condition.
+  const ready = fontsSettled && signedIn !== null;
 
   // Hand off from the native splash to our own the moment we can draw. The pour
   // screen is mounted above the app, so this swap is invisible.
@@ -82,5 +85,5 @@ export function useAppBoot(): AppBoot {
       ? "Boot timed out; running with system fonts."
       : null;
 
-  return { ready, degraded, online };
+  return { ready, degraded };
 }

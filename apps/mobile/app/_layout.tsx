@@ -4,22 +4,28 @@ import { useCallback, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import PourScreen from "../components/PourScreen";
+import RegisterScreen from "../components/RegisterScreen";
+import { useSessionStore } from "../lib/session-store";
 import { raw } from "../lib/theme";
 import { useAppBoot } from "../lib/use-app-boot";
 import "../global.css";
 
 /**
- * The root. Deliberately thin: providers, and the pour screen sitting above the
- * router until boot finishes.
+ * The root. Deliberately thin: providers, the register/sign-in gate, and the
+ * pour screen sitting above all of it until boot finishes.
  *
- * The pour is a sibling overlay rather than a route, so the app underneath is
- * already mounted and laid out by the time the glass fills — the hand-off is a
- * cross-fade onto a live screen, not a navigation to a blank one.
+ * The pour is a sibling overlay rather than a route, so whatever's underneath
+ * — the register screen or the tab navigator — is already mounted and laid out
+ * by the time the glass fills. The hand-off is a cross-fade onto a live
+ * screen, never a navigation to a blank one.
  */
 export default function RootLayout() {
   const { ready } = useAppBoot();
+  const signedIn = useSessionStore((s) => s.signedIn);
+  const setSignedIn = useSessionStore((s) => s.setSignedIn);
   const [poured, setPoured] = useState(false);
   const onDone = useCallback(() => setPoured(true), []);
+  const onAuthenticated = useCallback(() => setSignedIn(true), [setSignedIn]);
 
   // Nothing that draws text may mount before the fonts are registered.
   //
@@ -38,13 +44,17 @@ export default function RootLayout() {
     <GestureHandlerRootView className="flex-1 bg-stout-900">
       <SafeAreaProvider>
         <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: raw.canvas },
-            animation: "fade",
-          }}
-        />
+        {signedIn ? (
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: raw.canvas },
+              animation: "fade",
+            }}
+          />
+        ) : (
+          <RegisterScreen onAuthenticated={onAuthenticated} />
+        )}
         {poured ? null : <PourScreen ready={ready} onDone={onDone} />}
       </SafeAreaProvider>
     </GestureHandlerRootView>

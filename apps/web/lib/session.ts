@@ -12,7 +12,8 @@ import { auth } from "./auth";
 export interface Viewer {
   readonly userId: string;
   readonly displayName: string;
-  readonly isAnonymous: boolean;
+  readonly email: string;
+  readonly phone: string;
 }
 
 /** The signed-in user, or null. Reads the cookie or the Bearer token. */
@@ -21,12 +22,13 @@ export async function currentViewer(): Promise<Viewer | null> {
   if (!session?.user) return null;
   const u = session.user as typeof session.user & {
     displayName?: string | null;
-    isAnonymous?: boolean | null;
+    phone?: string | null;
   };
   return {
     userId: u.id,
     displayName: u.displayName ?? u.name ?? "Player",
-    isAnonymous: u.isAnonymous ?? false,
+    email: u.email,
+    phone: u.phone ?? "",
   };
 }
 

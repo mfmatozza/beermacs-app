@@ -200,3 +200,32 @@ staff."
 
 **Revisit when:** never, unless a future decision explicitly reopens phone-OTP
 (see the original plan's D3, now doubly superseded).
+
+---
+
+## D11 — Registration gates the whole app; account deletion ships with it
+
+Phase 2 of the roadmap, done: one screen (email, password, phone, display
+name — no anonymous path, per D10) renders before anything else, including the
+tab navigator. `useAppBoot`'s `signedIn` check now decides between it and the
+app, via a small zustand store (`session-store.ts`) rather than prop-drilling —
+the store exists because account deletion, deep in the Profile tab, needs to
+flip the same flag the root layout reads.
+
+Verified against the real API and Neon, not just types:
+
+- `sign-in/anonymous` is now a 404 — the plugin isn't mounted.
+- registering without `phone` is rejected server-side (`MISSING_FIELD`),
+  confirming the requirement lives in `apps/web/lib/auth.ts`'s config, not
+  only in the client-side Zod schema, which a bypassed client could skip.
+- a full registration persists phone and returns it from `/api/me`.
+- account deletion rejects the wrong password (400), succeeds with the right
+  one, and the User row is actually gone from Neon afterward — checked with
+  a direct query, not inferred from the 200 response.
+
+Also fixed while in `packages/shared/src/schemas`: every id field validated
+with `z.string().uuid()`, but every Prisma id is `@default(cuid())` — a cuid
+does not match UUID's hyphenated shape, so `createTeamInput`,
+`reportResultInput`, `assignTableInput` and the rest would have rejected every
+real id from our own database the moment they were used. Caught before any
+endpoint used them, not after.

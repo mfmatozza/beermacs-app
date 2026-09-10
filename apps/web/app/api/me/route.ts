@@ -41,7 +41,8 @@ export async function GET() {
       user: {
         id: viewer.userId,
         displayName: viewer.displayName,
-        isAnonymous: viewer.isAnonymous,
+        email: viewer.email,
+        phone: viewer.phone,
       },
       memberships,
       // Only tournaments still in play; History reads the rest.
