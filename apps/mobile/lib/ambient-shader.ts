@@ -1,23 +1,17 @@
 /**
- * Ambient background: beer particles drifting up a warm, glowing ground.
+ * Ambient background: a still, dark table — not a drink.
  *
- * Distinct from the pour shader in lib/beer-shader.ts, which fills the screen
- * with liquid. This one sits BEHIND the UI, so every choice is about not
- * competing with type:
- *
- *   - Bubbles drift rather than rise. The pour's bubbles accelerate; these move
- *     slowly and wobble, so peripheral vision reads them as atmosphere instead
- *     of as motion demanding attention.
- *   - Two bloom sources, both off-centre and soft: a broad amber wash at the top
- *     behind the wordmark, and a dimmer one low down so the screen does not go
- *     flat black at the bottom. This is what stops the app reading as a black
- *     rectangle.
- *   - Nothing is fully opaque. Text sits on top at full contrast; the ground
- *     never gets brighter than roughly 12% luminance.
+ * Replaces the earlier amber-bubble-field concept entirely (that one read as
+ * "brown liquid with floating circles", not as a beer-pong app). This is
+ * deliberately restrained: a near-black charcoal ground, a soft vignette, a
+ * faint far net-line and cup-rack triangle (the one piece of geometry a
+ * beer-pong table actually has), and fine dither to stop OLED banding.
+ * Static by construction — see AmbientBeer.tsx, which renders this once, not
+ * per frame. No bloom, no gradient wash, no glow: it sits behind type, it
+ * does not compete with it.
  */
 export const AMBIENT_SHADER = `
 uniform float2 u_res;
-uniform float  u_time;
 
 float hash21(float2 p) {
   float3 q = fract(p.xyx * float3(0.1031, 0.1030, 0.0973));
@@ -25,76 +19,49 @@ float hash21(float2 p) {
   return fract((q.x + q.y) * q.z);
 }
 
-// One soft radial bloom. falloff above 1 tightens it.
-float bloom(float2 uv, float2 at, float radius, float falloff) {
-  float d = length((uv - at) / float2(1.0, 1.0)) / radius;
-  return pow(max(0.0, 1.0 - d), falloff);
-}
-
-// Drifting bubbles. Cell-based, so cost is fixed regardless of count.
-float particles(float2 p, float t) {
-  float acc = 0.0;
-  for (int i = 0; i < 4; i++) {
-    float fi = float(i);
-    float scale = 4.5 + fi * 3.2;
-    float drift = 0.020 + fi * 0.012;
-
-    float2 g = p * scale;
-    g.y -= t * drift * scale;
-
-    float2 cell = floor(g);
-    float2 f = fract(g) - 0.5;
-
-    float h = hash21(cell + fi * 23.0);
-    float alive = step(0.80, h);
-
-    float r = 0.030 + fract(h * 11.3) * 0.055;
-    // Lateral sway, slower and wider than in the pour.
-    f.x += sin(g.y * 1.1 + h * 30.0 + t * 0.35) * 0.20;
-
-    float d = length(f);
-    // A ring with a faint fill — a bubble seen against a dark ground.
-    float rim = smoothstep(r, r * 0.74, d) - smoothstep(r * 0.66, r * 0.34, d);
-    float core = smoothstep(r * 0.9, 0.0, d) * 0.16;
-    acc += alive * (rim * 0.55 + core);
-  }
-  return acc;
+// Distance-to-ring outline at radius r, edge half-thickness w.
+float ring(float2 p, float2 at, float r, float w) {
+  float d = abs(length(p - at) - r);
+  return smoothstep(w, 0.0, d);
 }
 
 half4 main(float2 fragCoord) {
-  float2 st = fragCoord / u_res;
-  float aspect = u_res.x / u_res.y;
-  float x = st.x;
-  float y = 1.0 - st.y;
-  float t = u_time;
+  float2 res = u_res;
+  float aspect = res.x / res.y;
+  float2 st = fragCoord / res;
+  // Centred, aspect-corrected, y up-positive.
+  float2 uv = float2((st.x - 0.5) * aspect, 0.5 - st.y);
 
-  // Warm near-black, a touch lifted off #0A0908 so the screen has a floor
-  // rather than a void.
-  float3 col = float3(0.055, 0.048, 0.040);
+  // Charcoal, not brown — a hair above pure black so the screen has a floor.
+  float3 col = float3(0.043, 0.038, 0.034);
 
-  float2 uv = float2(x * aspect, y);
+  // Soft vignette: darker at the corners, never fully black.
+  float vign = smoothstep(0.95, 0.10, length(uv) / (aspect * 0.62));
+  col *= mix(0.76, 1.0, vign);
 
-  // Top bloom, behind the wordmark. Broad and amber.
-  col += float3(0.62, 0.36, 0.07)
-       * bloom(uv, float2(0.50 * aspect, 0.86), 0.80, 2.3) * 0.40;
+  // The far net-line — the one horizontal mark an actual table has, set low
+  // so it reads as ground, not as a UI divider.
+  float lineY = -0.08;
+  float netLine = smoothstep(0.0022, 0.0, abs(uv.y - lineY))
+                * smoothstep(aspect * 0.60, aspect * 0.08, abs(uv.x));
+  col += float3(0.85, 0.78, 0.62) * netLine * 0.045;
 
-  // A second, tighter highlight slightly off-centre, so the glow has a source
-  // instead of looking like a uniform vignette.
-  col += float3(0.75, 0.47, 0.12)
-       * bloom(uv, float2(0.34 * aspect, 0.80), 0.38, 2.8) * 0.24;
+  // A faint six-cup triangle rack, low and off-centre — restrained texture,
+  // not a decoration fighting for attention.
+  float2 rackOrigin = float2(aspect * 0.24, -0.32);
+  float spacing = 0.088;
+  float rack = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float fi = float(i);
+    float row = fi < 0.5 ? 0.0 : (fi < 2.5 ? 1.0 : 2.0);
+    float col_ = fi < 0.5 ? 0.0 : (fi < 2.5 ? fi - 1.0 : fi - 3.0);
+    float2 at = rackOrigin + float2((col_ - row * 0.5) * spacing, row * spacing * 0.9);
+    rack += ring(uv, at, spacing * 0.32, 0.0026);
+  }
+  col += float3(0.85, 0.78, 0.62) * rack * 0.05;
 
-  // Low bloom, so the bottom of the screen is not flat.
-  col += float3(0.34, 0.17, 0.03)
-       * bloom(uv, float2(0.66 * aspect, -0.06), 0.70, 2.2) * 0.42;
-
-  // Very slow breathing, so a static screen still feels alive. Deliberately
-  // under 4% — any more and it reads as a flicker bug.
-  col *= 0.97 + 0.035 * sin(t * 0.42);
-
-  col += float3(1.00, 0.86, 0.58) * particles(uv, t) * 0.30;
-
-  // Dither: long amber ramps band badly on OLED.
-  col += (hash21(fragCoord + t * 60.0) - 0.5) * 0.008;
+  // Fine static dither — long charcoal ramps band badly on OLED otherwise.
+  col += (hash21(fragCoord) - 0.5) * 0.012;
 
   return half4(half3(clamp(col, 0.0, 1.0)), 1.0);
 }

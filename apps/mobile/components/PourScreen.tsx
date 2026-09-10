@@ -1,6 +1,6 @@
 import { Canvas, Fill, Shader, Skia } from "@shopify/react-native-skia";
-import { useEffect, useMemo } from "react";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { AccessibilityInfo, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -18,6 +18,17 @@ const effect = Skia.RuntimeEffect.Make(BEER_SHADER);
 export default function PourScreen({ ready, onDone }: { ready: boolean; onDone: () => void }) {
   const { width, height } = useWindowDimensions();
   const { fill, overlay, percent, finished } = usePour({ ready });
+
+  // Reduced motion: skip the animated liquid entirely rather than "simplify"
+  // it — a still glass that LOOKS like it should be moving reads as broken,
+  // not as respectful. Same min-display-time and fade handoff either way,
+  // just a static wordmark on a flat ground instead of the shader.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
+    return () => sub.remove();
+  }, []);
 
   // A linear clock on the UI thread. Reanimated drives it, so the shader keeps
   // animating without a single frame crossing to JS.
@@ -54,7 +65,9 @@ export default function PourScreen({ ready, onDone }: { ready: boolean; onDone: 
       accessibilityRole="progressbar"
       accessibilityLabel="Pouring — loading Beermacs"
     >
-      {effect ? (
+      {reduceMotion ? (
+        <View style={StyleSheet.absoluteFill} className="bg-stout-900" />
+      ) : effect ? (
         <Canvas style={dims}>
           <Fill>
             <Shader source={effect} uniforms={uniforms} />
@@ -66,11 +79,10 @@ export default function PourScreen({ ready, onDone }: { ready: boolean; onDone: 
         <View style={StyleSheet.absoluteFill} className="bg-beer-700" />
       )}
 
-      {/* The wordmark sits in the upper third so the rising head climbs to meet
-          it, rather than being swallowed at the halfway point. */}
+      {/* Precisely centered, both axes — just the word, nothing under it. */}
       <View
         style={StyleSheet.absoluteFill}
-        className="items-stretch justify-start pt-[22%]"
+        className="items-center justify-center"
         pointerEvents="none"
       >
         <Text
@@ -78,9 +90,6 @@ export default function PourScreen({ ready, onDone }: { ready: boolean; onDone: 
           style={styles.wordmark}
         >
           BEERMACS
-        </Text>
-        <Text className="mt-2 text-center font-sans-med text-[11px] uppercase tracking-[1.1px] text-foam-300">
-          Tournament night
         </Text>
       </View>
 
