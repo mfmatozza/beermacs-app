@@ -5,8 +5,9 @@
 // it) — three copies of the same enum mapping is exactly how one of them
 // quietly drifts from the other two.
 
-import type { Match } from "@beermacs/shared";
+import type { Match, PendingReport } from "@beermacs/shared";
 import type { MatchState } from "@beermacs/db";
+import { prisma } from "@beermacs/db";
 
 export const MATCH_STATE_TO_DOMAIN: Record<MatchState, Match["state"]> = {
   SCHEDULED: "scheduled",
@@ -70,5 +71,31 @@ export function toDomainMatch(roundId: string, m: MatchRow): Match {
         ? { home: m.homeScore, away: m.awayScore }
         : null,
     tableId: m.venueTableId,
+  };
+}
+
+// ── The pending report ───────────────────────────────────────────────────
+//
+// A match can only ever have ONE "reported" phase in its lifecycle — "report"
+// is only a valid event from ON_TABLE, and once a captain's claim moves it to
+// REPORTED, the only ways out are confirm/reject/timeout (captains) or
+// staff_resolve (staff), none of which lead back to ON_TABLE. So there is at
+// most one CLAIM MatchReport per match, ever, and it's always the pending one
+// while state === "reported".
+
+export async function getPendingReport(matchId: string): Promise<PendingReport | null> {
+  const claim = await prisma.matchReport.findFirst({
+    where: { matchId, kind: "CLAIM" },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!claim || !claim.teamId || !claim.claimedWinnerTeamId) return null;
+  return {
+    reportedByTeamId: claim.teamId,
+    winnerId: claim.claimedWinnerTeamId,
+    score:
+      claim.homeScore !== null && claim.awayScore !== null
+        ? { home: claim.homeScore, away: claim.awayScore }
+        : null,
+    at: claim.createdAt.toISOString(),
   };
 }

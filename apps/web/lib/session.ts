@@ -71,6 +71,38 @@ export async function isTeamMember(userId: string, teamId: string): Promise<bool
   return m !== null;
 }
 
+/**
+ * Resolves who the viewer is FOR THIS MATCH — the one piece every result
+ * endpoint (report/confirm/reject/resolve) needs before it can even build an
+ * @beermacs/shared Actor. Staff at the match's venue outrank the rules (they
+ * get `{kind: "staff"}` even if they also happen to be on one of the teams —
+ * the match doesn't care which side a bar owner's own team is on). Otherwise
+ * the viewer must be a TeamMember of the home or away team; "each team
+ * reports" (U-11) is read as any member acting for it, not captain-only.
+ *
+ * Throws 403 rather than returning null: every caller's next step is either
+ * "use this actor" or "the request is over," so there's nothing useful a
+ * caller could do with a null.
+ */
+export async function resolveMatchActor(
+  viewer: Viewer,
+  homeTeamId: string | null,
+  awayTeamId: string | null,
+  venueId: string
+): Promise<
+  { kind: "staff"; userId: string } | { kind: "captain"; userId: string; teamId: string }
+> {
+  if (await hasVenueRole(viewer.userId, venueId, Role.VENUE_STAFF)) {
+    return { kind: "staff", userId: viewer.userId };
+  }
+  for (const teamId of [homeTeamId, awayTeamId]) {
+    if (teamId && (await isTeamMember(viewer.userId, teamId))) {
+      return { kind: "captain", userId: viewer.userId, teamId };
+    }
+  }
+  throw new HttpError(403, "not_a_match_participant");
+}
+
 export class HttpError extends Error {
   constructor(
     readonly status: number,
