@@ -7,7 +7,7 @@
 
 import { Role, prisma } from "@beermacs/db";
 import { headers } from "next/headers";
-import { auth } from "./auth";
+import { getAuth } from "./auth";
 
 export interface Viewer {
   readonly userId: string;
@@ -18,7 +18,7 @@ export interface Viewer {
 
 /** The signed-in user, or null. Reads the cookie or the Bearer token. */
 export async function currentViewer(): Promise<Viewer | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getAuth().api.getSession({ headers: await headers() });
   if (!session?.user) return null;
   const u = session.user as typeof session.user & {
     displayName?: string | null;
