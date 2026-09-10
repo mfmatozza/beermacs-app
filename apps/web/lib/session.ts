@@ -96,3 +96,39 @@ export async function requireVenueRole(venueId: string, atLeast: Role): Promise<
   }
   return viewer;
 }
+
+/**
+ * Round/match-scoped routes only have a roundId or matchId in the URL, not a
+ * venueId — this resolves the venue by walking the relation (Round → Stage →
+ * Tournament) and then applies the usual role check. Throws 404 rather than
+ * 403 if the round doesn't exist, so a guessed id doesn't confirm anything.
+ */
+export async function requireVenueRoleForRound(roundId: string, atLeast: Role): Promise<Viewer> {
+  const round = await prisma.round.findUnique({
+    where: { id: roundId },
+    select: { stage: { select: { tournament: { select: { venueId: true } } } } },
+  });
+  if (!round) throw new HttpError(404, "round_not_found");
+  return requireVenueRole(round.stage.tournament.venueId, atLeast);
+}
+
+/** Same idea, resolved from a stageId (Stage → Tournament, direct FK). Needed
+ *  for opening a round whose row may not exist yet — see the open-round route. */
+export async function requireVenueRoleForStage(stageId: string, atLeast: Role): Promise<Viewer> {
+  const stage = await prisma.stage.findUnique({
+    where: { id: stageId },
+    select: { tournament: { select: { venueId: true } } },
+  });
+  if (!stage) throw new HttpError(404, "stage_not_found");
+  return requireVenueRole(stage.tournament.venueId, atLeast);
+}
+
+/** Same idea, resolved from a matchId (Match → Tournament, direct FK). */
+export async function requireVenueRoleForMatch(matchId: string, atLeast: Role): Promise<Viewer> {
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    select: { tournament: { select: { venueId: true } } },
+  });
+  if (!match) throw new HttpError(404, "match_not_found");
+  return requireVenueRole(match.tournament.venueId, atLeast);
+}

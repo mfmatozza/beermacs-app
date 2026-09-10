@@ -69,8 +69,12 @@ The largest remaining chunk of screens. In build order:
    against Neon: role-gated to VENUE_ADMIN+, group-then-knockout produces
    GROUP+ELIMINATION stages, re-running with an overlapping table label
    reuses it rather than duplicating.
-2. **Round control** — open a round (A-13), see several open at once (A-14),
-   pause/resume auto-dispatch (A-15).
+2. **Round control** (done) — open a round (A-13), including rounds beyond
+   the first, whose Round row is created lazily on first open rather than
+   pre-existing; several stay open at once, verified (A-14); pause/resume
+   auto-dispatch per round (A-15). Also landed: team creation (U-2), which
+   round control needed real entrants to test against — a team's entryRound
+   is computed once, at creation, from entryRoundForNewTeam (E-6/E-7).
 3. **Team management** — add a team at any point (A-7/A-8), withdraw one,
    change any pairing manually (A-16), force a match's result (A-12).
 4. **Repêchage** — draw a team back in, auto or by name (A-9/A-10), any time.

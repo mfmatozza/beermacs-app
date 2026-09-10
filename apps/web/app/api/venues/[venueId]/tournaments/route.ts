@@ -41,6 +41,28 @@ async function uniqueJoinCode(): Promise<string> {
   throw new Error("Could not generate a unique join code after 8 attempts");
 }
 
+/**
+ * GET /api/venues/:venueId/tournaments — list this venue's tournaments, newest
+ * first. VENUE_STAFF+ (running the night needs to see them; only creating one
+ * needs VENUE_ADMIN).
+ */
+export async function GET(_req: Request, { params }: { params: Promise<{ venueId: string }> }) {
+  try {
+    const { venueId } = await params;
+    await requireVenueRole(venueId, Role.VENUE_STAFF);
+
+    const tournaments = await prisma.tournament.findMany({
+      where: { venueId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, format: true, status: true, joinCode: true },
+    });
+
+    return NextResponse.json({ tournaments });
+  } catch (e) {
+    return handleError(e);
+  }
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ venueId: string }> }) {
   try {
     const { venueId } = await params;

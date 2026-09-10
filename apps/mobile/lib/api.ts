@@ -4,7 +4,12 @@
 // session cookie that @better-auth/expo stores, so the handlers' `requireViewer`
 // sees the same user.
 
-import type { CreateTournamentInput, JoinTournamentInput } from "@beermacs/shared";
+import type {
+  CreateTeamInput,
+  CreateTournamentInput,
+  JoinTournamentInput,
+  SetRoundSchedulingInput,
+} from "@beermacs/shared";
 import { authClient } from "./auth-client";
 import { API_URL } from "./config";
 
@@ -74,6 +79,41 @@ export interface CreateTournamentResponse {
   readonly status: string;
 }
 
+export interface TournamentListItem {
+  readonly id: string;
+  readonly name: string;
+  readonly format: string;
+  readonly status: string;
+  readonly joinCode: string;
+}
+
+export interface RoundSummary {
+  readonly id: string;
+  readonly index: number;
+  readonly status: "open" | "not_opened";
+  readonly schedulingPaused: boolean;
+  readonly matchCount: number;
+  readonly waitingCount: number;
+}
+
+export interface StageSummary {
+  readonly id: string;
+  readonly type: "GROUP" | "ELIMINATION";
+  readonly order: number;
+  readonly advanceCount: number | null;
+  readonly rounds: readonly RoundSummary[];
+}
+
+export interface TournamentDetail {
+  readonly id: string;
+  readonly name: string;
+  readonly format: string;
+  readonly status: string;
+  readonly joinCode: string;
+  readonly stages: readonly StageSummary[];
+  readonly tables: readonly { id: string; label: string; state: string; sortOrder: number }[];
+}
+
 export const api = {
   me: () => request<MeResponse>("/api/me"),
   join: (body: JoinTournamentInput) =>
@@ -83,6 +123,25 @@ export const api = {
     }),
   createTournament: (venueId: string, body: CreateTournamentInput) =>
     request<CreateTournamentResponse>(`/api/venues/${venueId}/tournaments`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  listTournaments: (venueId: string) =>
+    request<{ tournaments: readonly TournamentListItem[] }>(`/api/venues/${venueId}/tournaments`),
+  tournamentDetail: (tournamentId: string) =>
+    request<TournamentDetail>(`/api/tournaments/${tournamentId}`),
+  createTeam: (tournamentId: string, body: CreateTeamInput) =>
+    request<{ id: string; name: string; entryRound: number }>(
+      `/api/tournaments/${tournamentId}/teams`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  openRound: (stageId: string, index: number) =>
+    request<{ id: string; index: number; status: string }>(
+      `/api/stages/${stageId}/rounds/${index}/open`,
+      { method: "POST" }
+    ),
+  setRoundScheduling: (roundId: string, body: SetRoundSchedulingInput) =>
+    request<{ id: string; schedulingPaused: boolean }>(`/api/rounds/${roundId}/scheduling`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
