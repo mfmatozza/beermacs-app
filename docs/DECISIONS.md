@@ -352,3 +352,22 @@ lazy-import pattern itself needs rethinking (e.g. checking for the native
 module's existence some other way before touching the API surface that
 transitively imports it) — but that hasn't been necessary here; the
 rebuild resolved it.
+
+---
+
+## D15 — Billing and venue onboarding cut from scope; apps/web being rebuilt from scratch
+
+User call, 2026-09-10: no Stripe billing, no self-serve venue onboarding
+flow — venues stay manually provisioned (as every venue in this repo has
+been all along) until explicitly told otherwise. The original "sell/license
+this to bars" framing from the start of the project doesn't currently need
+either built.
+
+Separately: `apps/web` is being rebuilt from scratch starting 2026-09-11
+(Friday) — direction to be decided in that conversation, not this one nor
+anything before it. Until that conversation happens, don't build anything
+new against the current `apps/web`, and don't assume its current shape
+(routes, structure, or design) survives.
+
+**Revisit when:** the 2026-09-11 conversation happens — this entry should
+be superseded by whatever comes out of it, not left standing alongside it.

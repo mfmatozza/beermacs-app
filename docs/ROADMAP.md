@@ -248,8 +248,15 @@ logic, now shared by both screens rather than duplicated. Deliberately
 functional over polished — see D14 for why, and for a real bug this phase
 found in the push-notification native module boundary.
 
-## Phase 7 — sell it
+## Phase 7 — sell it (cut down — see D15)
 
-Venue onboarding, Stripe subscription on the web (never in-app IAP for this —
-see APP_STORE_COMPLIANCE.md), post-tournament archive, the seeded demo venue
-for App Review, store submission.
+Billing and venue onboarding are OFF the roadmap — explicit call, D15.
+What's left here: post-tournament archive, the seeded demo venue for App
+Review, store submission. Venues stay manually provisioned (as they are
+today) until told otherwise.
+
+## Web app — rebuild from scratch (starting 2026-09-11)
+
+`apps/web` is being redone from scratch, direction TBD — see D15. Nothing
+in this phase should be built against the current `apps/web` until that
+conversation happens.
