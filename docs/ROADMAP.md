@@ -75,8 +75,15 @@ The largest remaining chunk of screens. In build order:
    auto-dispatch per round (A-15). Also landed: team creation (U-2), which
    round control needed real entrants to test against — a team's entryRound
    is computed once, at creation, from entryRoundForNewTeam (E-6/E-7).
-3. **Team management** — add a team at any point (A-7/A-8), withdraw one,
-   change any pairing manually (A-16), force a match's result (A-12).
+3. **Team management** (done) — admin-add a team at any point, no join code
+   (A-7/A-8) via lib/teams.ts's shared entry-round logic; withdraw one
+   (soft flag, does not auto-resolve an in-flight match — A-12 is the tool
+   for that, deliberately kept as one explicit action rather than a guessing
+   cascade); manual pairing (A-16), checked against the exact waitingTeams()
+   the automatic dispatcher will use so a manual and an automatic pairing are
+   indistinguishable once created; force a result (A-12) via the same
+   transition() state machine a captain's report goes through — no separate
+   admin code path to keep in sync with the rules.
 4. **Repêchage** — draw a team back in, auto or by name (A-9/A-10), any time.
 5. **Player directory** — the email/phone list for re-contacting players next
    time (A-21), gated to `VENUE_ADMIN`+.

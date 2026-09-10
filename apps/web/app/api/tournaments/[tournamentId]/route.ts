@@ -4,22 +4,14 @@
 //
 // VENUE_STAFF+ — this is the night-of running view, not the setup one.
 
-import { waitingTeams, type Match, type Round as DomainRound } from "@beermacs/shared";
-import { MatchState, Role, prisma } from "@beermacs/db";
+import { waitingTeams, type Round as DomainRound } from "@beermacs/shared";
+import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError } from "@/lib/http";
+import { MATCH_SELECT, toDomainMatch } from "@/lib/match-mapping";
 import { requireVenueRole } from "@/lib/session";
 
 export const runtime = "nodejs";
-
-const MATCH_STATE_MAP: Record<MatchState, Match["state"]> = {
-  SCHEDULED: "scheduled",
-  QUEUED: "queued",
-  ON_TABLE: "on_table",
-  REPORTED: "reported",
-  DISPUTED: "disputed",
-  CONFIRMED: "confirmed",
-};
 
 export async function GET(
   _req: Request,
@@ -53,21 +45,7 @@ export async function GET(
                 status: true,
                 schedulingPaused: true,
                 entrants: { select: { teamId: true } },
-                matches: {
-                  select: {
-                    id: true,
-                    position: true,
-                    homeTeamId: true,
-                    awayTeamId: true,
-                    homeViaRepechage: true,
-                    awayViaRepechage: true,
-                    state: true,
-                    winnerTeamId: true,
-                    homeScore: true,
-                    awayScore: true,
-                    venueTableId: true,
-                  },
-                },
+                matches: { select: MATCH_SELECT },
               },
             },
           },
@@ -97,20 +75,7 @@ export async function GET(
           status: r.status === "OPEN" ? "open" : "not_opened",
           schedulingPaused: r.schedulingPaused,
         };
-        const matches: Match[] = r.matches.map((m) => ({
-          id: m.id,
-          roundId: r.id,
-          position: m.position,
-          home: { teamId: m.homeTeamId, viaRepechage: m.homeViaRepechage },
-          away: { teamId: m.awayTeamId, viaRepechage: m.awayViaRepechage },
-          state: MATCH_STATE_MAP[m.state],
-          winnerId: m.winnerTeamId,
-          score:
-            m.homeScore !== null && m.awayScore !== null
-              ? { home: m.homeScore, away: m.awayScore }
-              : null,
-          tableId: m.venueTableId,
-        }));
+        const matches = r.matches.map((m) => toDomainMatch(r.id, m));
         const entrants = r.entrants.map((e) => ({
           teamId: e.teamId,
           roundId: r.id,

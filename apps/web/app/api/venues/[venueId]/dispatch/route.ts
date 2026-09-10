@@ -10,49 +10,14 @@
 // separate, heavier endpoint — this one only ever hands tables to matches that
 // already exist and have both slots filled. See docs/ROADMAP.md.
 
-import { planDispatch, type Match, type VenueTable } from "@beermacs/shared";
-import { MatchState, Role, TableState, prisma } from "@beermacs/db";
+import { planDispatch, type VenueTable } from "@beermacs/shared";
+import { Role, TableState, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError } from "@/lib/http";
+import { MATCH_SELECT, toDomainMatch } from "@/lib/match-mapping";
 import { requireVenueRole } from "@/lib/session";
 
 export const runtime = "nodejs";
-
-/** Prisma rows → the domain shapes @beermacs/shared expects. */
-const toMatch = (m: {
-  id: string;
-  roundId: string;
-  position: number;
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  homeViaRepechage: boolean;
-  awayViaRepechage: boolean;
-  state: MatchState;
-  winnerTeamId: string | null;
-  homeScore: number | null;
-  awayScore: number | null;
-  venueTableId: string | null;
-}): Match => ({
-  id: m.id,
-  roundId: m.roundId,
-  position: m.position,
-  home: { teamId: m.homeTeamId, viaRepechage: m.homeViaRepechage },
-  away: { teamId: m.awayTeamId, viaRepechage: m.awayViaRepechage },
-  state: (
-    {
-      SCHEDULED: "scheduled",
-      QUEUED: "queued",
-      ON_TABLE: "on_table",
-      REPORTED: "reported",
-      DISPUTED: "disputed",
-      CONFIRMED: "confirmed",
-    } as const
-  )[m.state],
-  winnerId: m.winnerTeamId,
-  score:
-    m.homeScore !== null && m.awayScore !== null ? { home: m.homeScore, away: m.awayScore } : null,
-  tableId: m.venueTableId,
-});
 
 const toTable = (t: {
   id: string;
@@ -78,11 +43,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ venueId
       prisma.match.findMany({
         where: { tournament: { venueId, status: "RUNNING" } },
         orderBy: [{ round: { index: "asc" } }, { position: "asc" }],
+        select: { ...MATCH_SELECT, roundId: true },
       }),
       prisma.venueTable.findMany({ where: { venueId }, orderBy: { sortOrder: "asc" } }),
     ]);
 
-    const plan = planDispatch(rows.map(toMatch), tableRows.map(toTable));
+    const plan = planDispatch(
+      rows.map((m) => toDomainMatch(m.roundId, m)),
+      tableRows.map(toTable)
+    );
     return NextResponse.json(plan);
   } catch (e) {
     return handleError(e);
