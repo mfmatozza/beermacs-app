@@ -9,6 +9,7 @@ import { assignTableInput, transition } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
+import { ensureMatchChatChannel } from "@/lib/chat-triggers";
 import { MATCH_STATE_TO_PRISMA, toDomainMatch } from "@/lib/match-mapping";
 import { sendNotifyIntents } from "@/lib/notify";
 import { HttpError, requireVenueRoleForMatch } from "@/lib/session";
@@ -36,7 +37,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
         homeScore: true,
         awayScore: true,
         venueTableId: true,
-        tournament: { select: { venueId: true } },
+        tournamentId: true,
+        tournament: { select: { venueId: true, config: true } },
       },
     });
 
@@ -68,6 +70,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     ]);
 
     await sendNotifyIntents(notify, { venueId: row.tournament.venueId, tableLabel: table.label });
+    const chatEnabled = (row.tournament.config as { chatEnabled?: boolean })?.chatEnabled ?? false;
+    await ensureMatchChatChannel(matchId, row.tournamentId, chatEnabled);
 
     return NextResponse.json({ id: matchId, tableId: body.tableId, state: next.state });
   } catch (e) {

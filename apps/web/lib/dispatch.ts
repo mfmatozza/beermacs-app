@@ -31,6 +31,7 @@ import {
   type VenueTable as DomainTable,
 } from "@beermacs/shared";
 import { prisma } from "@beermacs/db";
+import { ensureMatchChatChannel } from "./chat-triggers";
 import { MATCH_SELECT, toDomainMatch } from "./match-mapping";
 import { sendNotifyIntents } from "./notify";
 
@@ -147,7 +148,7 @@ export async function runDispatchPass(venueId: string): Promise<DispatchSummary>
     prisma.match.findMany({
       where: { tournament: { venueId, status: "RUNNING" } },
       orderBy: [{ round: { index: "asc" } }, { position: "asc" }],
-      select: { ...MATCH_SELECT, roundId: true },
+      select: { ...MATCH_SELECT, roundId: true, tournamentId: true },
     }),
     prisma.venueTable.findMany({ where: { venueId }, orderBy: { sortOrder: "asc" } }),
   ]);
@@ -165,6 +166,9 @@ export async function runDispatchPass(venueId: string): Promise<DispatchSummary>
 
   const matchById = new Map(allMatches.map((m) => [m.id, m]));
   const tableById = new Map(allTables.map((t) => [t.id, t]));
+  const chatEnabledByTournament = new Map(
+    tournaments.map((t) => [t.id, (t.config as { chatEnabled?: boolean })?.chatEnabled ?? false])
+  );
 
   let tableAssignments = 0;
   for (const { matchId, tableId } of plan.assignments) {
@@ -190,6 +194,13 @@ export async function runDispatchPass(venueId: string): Promise<DispatchSummary>
     if (teams.length > 0) {
       const notify: NotifyIntent[] = [{ kind: "youre_up", teams, tableId }];
       await sendNotifyIntents(notify, { venueId, tableLabel: table?.label ?? null });
+    }
+    if (match) {
+      await ensureMatchChatChannel(
+        matchId,
+        match.tournamentId,
+        chatEnabledByTournament.get(match.tournamentId) ?? false
+      );
     }
   }
 

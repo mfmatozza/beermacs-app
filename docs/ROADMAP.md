@@ -198,12 +198,55 @@ this as a prerequisite, not new information. Chat's own push (U-16) is a
 trivial extension of the same `sendNotifyIntents`/`sendPushToTokens` pair
 once Phase 6 exists; nothing about this phase's design blocks it.
 
-## Phase 6 — chat (U-8..U-10)
+## Phase 6 — chat (U-8..U-10) (done)
 
-Per-match channels (auto-created when a match goes on a table), a tournament-
-wide channel, admin read/write access to every match's chat. Ships together
-with report/block/mute — App Store guideline 1.2 requires the moderation kit
-to exist _before_ user-generated content can go live, not after.
+Three surfaces, exactly what the spec names and no more:
+
+- **Tournament chat** (U-9) — `GET/POST /tournaments/:id/chat/messages`.
+  Lazily created (find-or-create by tournamentId+kind, same pattern the
+  admin BROADCAST channel already used), and only if the tournament has
+  chat enabled (A-2).
+- **Match chat** (U-8) — `GET/POST /matches/:id/chat/messages`. The channel
+  itself is driven by match lifecycle, not by a chat request:
+  `lib/chat-triggers.ts`'s `ensureMatchChatChannel`/`archiveMatchChatChannel`
+  are called from every place a match goes ON_TABLE (assign-table/route.ts,
+  and lib/dispatch.ts's automatic assignment) and every place one settles
+  (report/confirm/resolve) — a match with no channel yet just means it
+  hasn't played. Also triggers a push per U-16 ("private/match" only —
+  deliberately not the tournament-wide channel, which would be noise).
+- **Staff messages** (U-10, A-18/A-19) — `GET
+/tournaments/:id/chat/staff-messages` merges the TEAM/DIRECT/BROADCAST
+  channels a player can be a recipient of into one read-only feed; writing
+  is the existing admin `POST /tournaments/:id/messages` from Phase 3,
+  unchanged. Admins read/write any of the three kinds through the same
+  routes staff already had — U-10 needed no new admin-side code.
+
+**Moderation kit** (App Store guideline 1.2 — required before UGC can ship,
+built alongside chat rather than after): `BlockedUser` (a player's own,
+one-directional choice, checked at read time — `lib/chat.ts`'s
+`listChannelMessages` replaces a blocked author's messages with a
+placeholder rather than removing them, so blocking doesn't shift every
+other message's position) and `MutedPlayer` (a staff action, scoped to one
+tournament, checked before every post) are new Prisma models; `ChatMessage.
+flaggedAt` (already in schema, unused until now) is the report path,
+closed by a staff-only soft-delete (`DELETE /chat/messages/:id`).
+
+Verified against real Neon end to end: tournament chat post/read from both
+roles, match chat auto-create on dispatch → post → auto-archive on settle,
+report → 403 for a non-staff delete attempt → staff delete actually removes
+it from the read feed, block hides a specific author's messages for the
+blocker only (confirmed the _other_ viewer still sees them normally), staff
+mute returns 403 on the next post attempt and unmute lifts it, and the
+staff-messages feed correctly surfaces an admin broadcast to a player.
+
+Mobile: `app/(tabs)/chat.tsx` replaces the ComingSoon placeholder — a
+three-way switcher (Everyone / My match / From the bar), send box, and
+per-message Report/Block (everyone) plus Mute/Delete (staff only, resolved
+from `/api/me`'s venue membership role). `lib/use-current-team.ts` extracted
+from the bracket tab's own "which tournament is this player in right now"
+logic, now shared by both screens rather than duplicated. Deliberately
+functional over polished — see D14 for why, and for a real bug this phase
+found in the push-notification native module boundary.
 
 ## Phase 7 — sell it
 

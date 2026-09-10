@@ -245,6 +245,18 @@ export const sendAdminMessageInput = z
   });
 export type SendAdminMessageInput = z.infer<typeof sendAdminMessageInput>;
 
+/** Payload for POST .../chat/messages (U-8/U-9) — a player or staff post. */
+export const sendChatMessageInput = z.object({
+  body: z.string().trim().min(1).max(2000),
+});
+export type SendChatMessageInput = z.infer<typeof sendChatMessageInput>;
+
+/** Payload for POST /api/tournaments/:id/players/:userId/mute. */
+export const mutePlayerInput = z.object({
+  reason: z.string().trim().max(280).optional(),
+});
+export type MutePlayerInput = z.infer<typeof mutePlayerInput>;
+
 /**
  * Payload for POST /api/push/register (U-15..U-17). Re-registering an
  * existing token re-points it at whoever is signed in now — a shared or

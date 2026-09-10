@@ -93,6 +93,28 @@ export async function sendAdminMessagePush(
   });
 }
 
+/**
+ * U-16: "push notification for every new message in a private/match chat."
+ * Deliberately does NOT cover the TOURNAMENT (U-9) group channel — a push
+ * per message in a channel everyone in the tournament is in would be noise,
+ * and the spec's own wording ("private/match") already excludes it. DIRECT
+ * messages go through sendAdminMessagePush instead (they're staff-authored,
+ * not a chat between players).
+ */
+export async function sendMatchChatPush(
+  homeTeamId: string | null,
+  awayTeamId: string | null,
+  senderName: string
+): Promise<void> {
+  const teamIds = [homeTeamId, awayTeamId].filter((t): t is string => t !== null);
+  const tokens = await tokensForTeams(teamIds);
+  await sendPushToTokens(tokens, {
+    title: "New match message",
+    body: `${senderName} sent a message.`,
+    data: { kind: "match" },
+  });
+}
+
 export async function sendNotifyIntents(
   notify: readonly NotifyIntent[],
   ctx: NotifyMatchContext

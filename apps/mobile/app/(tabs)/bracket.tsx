@@ -2,14 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  api,
-  type BoardMatch,
-  type BoardRound,
-  type BoardStage,
-  type MeResponse,
-} from "../../lib/api";
+import { api, type BoardMatch, type BoardRound, type BoardStage } from "../../lib/api";
 import { TAB_BAR_HEIGHT, raw } from "../../lib/theme";
+import { useCurrentTeam } from "../../lib/use-current-team";
 import NextUpCard, { type NextUpState } from "../../components/NextUpCard";
 
 /**
@@ -31,8 +26,7 @@ export default function BracketTab() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
-  const meQuery = useQuery({ queryKey: ["me"], queryFn: api.me });
-  const myTeam = firstActiveTeam(meQuery.data);
+  const { myTeam, isLoading: meLoading } = useCurrentTeam();
   const tournamentId = myTeam?.team.tournament.id ?? null;
 
   const boardQuery = useQuery({
@@ -110,7 +104,7 @@ export default function BracketTab() {
         ) : null}
       </View>
 
-      {meQuery.isLoading || (tournamentId && boardQuery.isLoading) ? (
+      {meLoading || (tournamentId && boardQuery.isLoading) ? (
         <ActivityIndicator color={raw.beer} />
       ) : !tournamentId ? (
         <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
@@ -133,11 +127,6 @@ export default function BracketTab() {
       )}
     </ScrollView>
   );
-}
-
-function firstActiveTeam(me: MeResponse | undefined) {
-  if (!me) return undefined;
-  return me.teams.find((t) => t.team.tournament.status !== "COMPLETE");
 }
 
 type MyNextUp =

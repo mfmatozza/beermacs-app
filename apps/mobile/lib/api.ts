@@ -172,6 +172,17 @@ export interface TournamentBoard {
   readonly stages: readonly BoardStage[];
 }
 
+// ── Chat (U-8/U-9/U-10) and moderation (App Store guideline 1.2) ────────
+
+export interface ChatMessage {
+  readonly id: string;
+  readonly authorId: string | null;
+  readonly authorName: string | null;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly flaggedAt: string | null;
+}
+
 export const api = {
   me: () => request<MeResponse>("/api/me"),
   join: (body: JoinTournamentInput) =>
@@ -224,5 +235,48 @@ export const api = {
     request<{ id: string }>("/api/push/register", {
       method: "POST",
       body: JSON.stringify({ expoPushToken, platform }),
+    }),
+  tournamentChat: (tournamentId: string) =>
+    request<{ channelId: string; messages: readonly ChatMessage[] }>(
+      `/api/tournaments/${tournamentId}/chat/messages`
+    ),
+  sendTournamentChat: (tournamentId: string, body: string) =>
+    request<{ id: string; channelId: string }>(`/api/tournaments/${tournamentId}/chat/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+  matchChat: (matchId: string) =>
+    request<{ channelId: string; messages: readonly ChatMessage[] }>(
+      `/api/matches/${matchId}/chat/messages`
+    ),
+  sendMatchChat: (matchId: string, body: string) =>
+    request<{ id: string; channelId: string }>(`/api/matches/${matchId}/chat/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+  staffMessages: (tournamentId: string) =>
+    request<{ messages: readonly ChatMessage[] }>(
+      `/api/tournaments/${tournamentId}/chat/staff-messages`
+    ),
+  reportMessage: (messageId: string) =>
+    request<{ id: string; flagged: boolean }>(`/api/chat/messages/${messageId}/report`, {
+      method: "POST",
+    }),
+  blockUser: (userId: string) =>
+    request<{ blockedUserId: string; blocked: boolean }>(`/api/users/${userId}/block`, {
+      method: "POST",
+    }),
+  unblockUser: (userId: string) =>
+    request<{ blockedUserId: string; blocked: boolean }>(`/api/users/${userId}/block`, {
+      method: "DELETE",
+    }),
+  muteInTournament: (tournamentId: string, userId: string, reason?: string) =>
+    request<{ userId: string; muted: boolean }>(
+      `/api/tournaments/${tournamentId}/players/${userId}/mute`,
+      { method: "POST", body: JSON.stringify({ reason }) }
+    ),
+  deleteChatMessage: (messageId: string) =>
+    request<{ id: string; deleted: boolean }>(`/api/chat/messages/${messageId}`, {
+      method: "DELETE",
     }),
 };

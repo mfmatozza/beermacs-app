@@ -307,3 +307,48 @@ second call site for yet.
 here has been verified past Expo's HTTP endpoint accepting/rejecting the
 send; actual delivery to a phone needs `eas credentials` set up with a real
 Apple Developer APNs key, which is a user action, not a code one.
+
+---
+
+## D14 — Chat/moderation shipped function-first; a real bug found doing it
+
+Phase 6, built the same session the user explicitly asked for backend/
+function completeness first and design second ("finish everything function/
+backend wise" — visual direction to be described separately, later). The
+mobile chat screen (`app/(tabs)/chat.tsx`) is therefore deliberately plain:
+this app's existing tokens reused as-is, no new visual language attempted.
+Revisit once the user has actually described what "right" looks like — see
+the conversation this decision came from, not repeated here.
+
+**A real bug found while verifying this phase, not a design one**: the
+lazy-import pattern `apps/mobile/lib/push.ts` uses for `expo-notifications`
+(`await import("expo-notifications")` inside a `try/catch`, exactly
+astra-app's own pattern, meant to no-op gracefully on a dev client built
+before the plugin existed) does **not** actually protect against the
+failure it was written for, at least under Metro's dev bundling. Calling
+`registerForPush()` on a dev client without the native module compiled in
+crashed with an _uncaught_ `Cannot find native module 'ExpoPushTokenManager'`
+— the `try/catch` never saw it. The stack trace shows why: the throw
+happens at **module evaluation time**, inside `PushTokenManager.native.js`'s
+top-level code, not inside any function my code calls. Metro does not do
+true lazy code-splitting for a dynamic `import()` the way a bundler like
+webpack does — the imported module's top-level code runs when the bundle
+loads, not when the `import()` call is awaited, so by the time
+`registerForPush()` runs, the module has already thrown, outside every
+`try/catch` in reach.
+
+**Chosen**: don't try to out-clever this with a different JS-level guard —
+the actual fix is what the plugin declaration in `app.config.ts` already
+implied was needed: a real native rebuild (`expo run:ios`) so the module
+genuinely exists. That's the only state this app should ship in anyway;
+the lazy-import pattern is worth keeping as a safety net for exactly the
+dev-loop gap it was designed for (JS reloads instantly, a native rebuild
+doesn't, so there's a real window after adding a native plugin where a
+stale dev client is still running) — it just cannot be trusted as the
+_only_ protection, and does not remove the need to actually rebuild.
+
+**Revisit when**: if this resurfaces after a real native rebuild, the
+lazy-import pattern itself needs rethinking (e.g. checking for the native
+module's existence some other way before touching the API surface that
+transitively imports it) — but that hasn't been necessary here; the
+rebuild resolved it.

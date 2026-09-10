@@ -89,6 +89,10 @@ model User {
   reports       MatchReport[]
   auditEntries  AuditEntry[]      @relation("AuditActor")
   authoredNews  News[]            @relation("NewsAuthor")
+  blocked       BlockedUser[]     @relation("Blocker")
+  blockedBy     BlockedUser[]     @relation("Blocked")
+  mutedIn       MutedPlayer[]     @relation("MutedUser")
+  mutedByStaff  MutedPlayer[]     @relation("MutedByStaff")
 
   @@index([deletedAt])
 }
@@ -284,6 +288,7 @@ model Tournament {
   chatChannels ChatChannel[]
   auditEntries AuditEntry[]
   champion     Team?        @relation("Champion", fields: [championTeamId], references: [id])
+  mutedPlayers MutedPlayer[]
 
   @@index([venueId, status])
 }
@@ -662,6 +667,45 @@ model ChatMessage {
   author  User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([channelId, createdAt])
+}
+
+/// A player hiding another player's messages from themselves (App Store
+/// guideline 1.2's "block"). Personal and mutual only in effect, not in
+/// storage — A blocking B does not stop B from seeing A's messages, so this
+/// is a one-directional row, checked from the reader's side at query time.
+model BlockedUser {
+  id            String   @id @default(cuid())
+  blockerUserId String
+  blockedUserId String
+  createdAt     DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerUserId, blockedUserId])
+  @@index([blockedUserId])
+}
+
+/// Staff silencing a player across every chat in ONE tournament (guideline
+/// 1.2's "mute" — distinct from BlockedUser, which is a player's own choice
+/// about their own view). Scoped to a tournament, not the venue or the app,
+/// because a mute is a response to that night's behaviour, not a permanent
+/// judgement — matches how VenueMembership roles are scoped, but per-
+/// tournament instead of per-venue since the misbehaviour is per-tournament.
+model MutedPlayer {
+  id           String   @id @default(cuid())
+  tournamentId String
+  userId       String
+  mutedById    String
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User       @relation("MutedUser", fields: [userId], references: [id], onDelete: Cascade)
+  mutedBy    User       @relation("MutedByStaff", fields: [mutedById], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId])
 }
 
 // ─── Push ───────────────────────────────────────────────────────────────────

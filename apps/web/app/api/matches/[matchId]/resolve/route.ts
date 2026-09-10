@@ -9,6 +9,7 @@
 import { staffResolveInput, transition } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
+import { archiveMatchChatChannel } from "@/lib/chat-triggers";
 import { handleError, parseBody } from "@/lib/http";
 import {
   advanceWinnerToNextRound,
@@ -106,6 +107,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     });
 
     await sendNotifyIntents(notify, { venueId: row.tournament.venueId });
+    await archiveMatchChatChannel(matchId);
 
     return NextResponse.json({ id: matchId, state: settled.state, winnerId: settled.winnerId });
   } catch (e) {

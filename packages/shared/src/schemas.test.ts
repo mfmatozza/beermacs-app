@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 import {
   createTournamentInput,
   joinTournamentInput,
+  mutePlayerInput,
   pushRegisterInput,
   registerInput,
   reportResultInput,
   sendAdminMessageInput,
+  sendChatMessageInput,
   signInInput,
   staffResolveInput,
 } from "./schemas";
@@ -180,5 +182,32 @@ describe("pushRegisterInput", () => {
 
   it("rejects a platform outside IOS/ANDROID", () => {
     assert.throws(() => pushRegisterInput.parse({ expoPushToken: "t", platform: "WEB" }));
+  });
+});
+
+describe("sendChatMessageInput", () => {
+  it("accepts a normal message and trims it", () => {
+    const r = sendChatMessageInput.parse({ body: "  gl hf  " });
+    assert.strictEqual(r.body, "gl hf");
+  });
+
+  it("rejects an empty or whitespace-only message", () => {
+    assert.throws(() => sendChatMessageInput.parse({ body: "" }));
+    assert.throws(() => sendChatMessageInput.parse({ body: "   " }));
+  });
+
+  it("rejects a message over 2000 characters", () => {
+    assert.throws(() => sendChatMessageInput.parse({ body: "x".repeat(2001) }));
+  });
+});
+
+describe("mutePlayerInput", () => {
+  it("accepts no reason at all", () => {
+    assert.doesNotThrow(() => mutePlayerInput.parse({}));
+  });
+
+  it("accepts a short reason", () => {
+    const r = mutePlayerInput.parse({ reason: "trash talk" });
+    assert.strictEqual(r.reason, "trash talk");
   });
 });
