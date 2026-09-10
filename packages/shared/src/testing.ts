@@ -1,20 +1,31 @@
-import type { Match, MatchId, Score, Slot, Team, TeamId, VenueTable } from "./domain";
+import type {
+  Match,
+  MatchId,
+  Round,
+  RoundId,
+  Score,
+  Slot,
+  Team,
+  TeamId,
+  VenueTable,
+} from "./domain";
 
 /** Fixture builders, so tests read as scenarios rather than object literals. */
 
-export const team = (id: string, seed: number, name = id.toUpperCase()): Team => ({
+export const team = (id: string, entryRound = 1, name = id.toUpperCase()): Team => ({
   id,
   name,
-  seed,
+  entryRound,
+  withdrawn: false,
 });
 
-export const teams = (...names: string[]): Team[] => names.map((n, i) => team(n, i));
+export const teams = (...names: string[]): Team[] => names.map((n) => team(n, 1));
 
-const slot = (teamId: TeamId | null, viaLuckyLoser = false): Slot => ({ teamId, viaLuckyLoser });
+const slot = (teamId: TeamId | null, viaRepechage = false): Slot => ({ teamId, viaRepechage });
 
 export function match(over: Partial<Match> & { id: MatchId }): Match {
   return {
-    round: 1,
+    roundId: "r1",
     position: 0,
     home: slot(null),
     away: slot(null),
@@ -22,7 +33,6 @@ export function match(over: Partial<Match> & { id: MatchId }): Match {
     winnerId: null,
     score: null,
     tableId: null,
-    isBye: false,
     ...over,
   };
 }
@@ -30,7 +40,7 @@ export function match(over: Partial<Match> & { id: MatchId }): Match {
 /** A match between two teams, optionally already settled. */
 export function played(
   id: MatchId,
-  round: number,
+  roundId: RoundId,
   position: number,
   home: TeamId,
   away: TeamId,
@@ -38,7 +48,7 @@ export function played(
 ): Match {
   return match({
     id,
-    round,
+    roundId,
     position,
     home: slot(home),
     away: slot(away),
@@ -48,16 +58,12 @@ export function played(
   });
 }
 
-export const bye = (id: MatchId, round: number, position: number, teamId: TeamId): Match =>
-  match({
-    id,
-    round,
-    position,
-    home: slot(teamId),
-    state: "confirmed",
-    winnerId: teamId,
-    isBye: true,
-  });
+export const round = (
+  id: RoundId,
+  index: number,
+  status: Round["status"] = "not_opened",
+  schedulingPaused = false
+): Round => ({ id, stageId: "s1", index, status, schedulingPaused });
 
 export const venueTable = (
   id: string,

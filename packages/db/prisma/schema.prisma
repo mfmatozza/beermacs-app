@@ -82,6 +82,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   memberships   VenueMembership[]
+  directMessagesReceived ChatChannel[] @relation("DirectMessageRecipient")
   teamMembers   TeamMember[]
   devices       Device[]
   messages      ChatMessage[]
@@ -226,11 +227,15 @@ model VenueTable {
 
 // ─── Tournaments ────────────────────────────────────────────────────────────
 
-enum TournamentFormat {
-  /// Single-elimination knockout.
-  ELIMINATION
-  /// Round-robin groups, top N per group advance into an elimination bracket.
-  GROUP_THEN_ELIMINATION
+/// A-5: the standard case is single elimination, but the admin must be free to
+/// run other structures. Mirrors TournamentFormatKind in @beermacs/shared.
+/// `TRIANGULAR` is a fixed group size of 3, everyone plays everyone — the same
+/// Stage/Group machinery as GROUP_THEN_KNOCKOUT with a different grouping step,
+/// not a separate engine.
+enum TournamentFormatKind {
+  SINGLE_ELIMINATION
+  GROUP_THEN_KNOCKOUT
+  TRIANGULAR
 }
 
 enum TournamentStatus {
@@ -242,25 +247,29 @@ enum TournamentStatus {
 }
 
 model Tournament {
-  id      String           @id @default(cuid())
+  id      String               @id @default(cuid())
   venueId String
   name    String
-  format  TournamentFormat @default(ELIMINATION)
-  status  TournamentStatus @default(DRAFT)
+  /// A-6: this is a plain field update, not a migration — changing the format
+  /// mid-tournament is meant to be cheap. Which STRUCTURE the engine runs.
+  format  TournamentFormatKind @default(SINGLE_ELIMINATION)
+  status  TournamentStatus     @default(DRAFT)
 
   /// Six characters, Crockford Base32 — see @beermacs/shared join-code.ts.
   /// Printed on the table tent, read aloud in a loud room.
   joinCode String @unique
 
   startsAt DateTime?
-  /// Which stage's matches are currently live.
-  currentRound Int @default(1)
 
-  /// Format knobs a venue may change: cupsToWin, luckyLosers on/off,
-  /// confirmTimeoutMins, teamSize. Kept as JSON so adding double-elimination
-  /// later is a feature flag rather than a migration. Shape and defaults live
-  /// in @beermacs/shared (TournamentFormat / defaultFormat).
+  /// Tunable knobs beyond the structural `format`: playersPerTeam (A-1),
+  /// chatEnabled (A-2), autoRepechageMode (A-10's default for E-8),
+  /// confirmTimeoutMins, cupsToWin (null = this format doesn't score matches).
+  /// Shape lives in @beermacs/shared as TournamentFormat minus `kind`, which is
+  /// the `format` column above — the API merges the two when serialising.
   config Json @default("{}")
+
+  /// There is no `currentRound` scalar. Which round is "current" is a
+  /// derived question — see Round.status below — not a value to keep in sync.
 
   championTeamId String? @unique
 
@@ -297,6 +306,7 @@ model Stage {
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   groups     Group[]
+  rounds     Round[]
   matches    Match[]
 
   @@unique([tournamentId, order])
@@ -329,30 +339,90 @@ model GroupMember {
   @@unique([groupId, teamId])
 }
 
+/// A-13: a round's own lifecycle. NOT_OPENED is where every round starts,
+/// including round 1 — the spec is explicit that round 1 exists conceptually,
+/// with teams already counted as belonging to it, before anyone has opened it
+/// (E-7). There is no CLOSED state: nothing in the spec asks a round to ever
+/// shut, and A-8's "no fixed cut-off" for adding teams reads most naturally as
+/// "a round, once open, stays a valid target forever."
+enum RoundStatus {
+  NOT_OPENED
+  OPEN
+}
+
+model Round {
+  id      String      @id @default(cuid())
+  stageId String
+  /// 1-based, matches Match.position's round for display.
+  index   Int
+  status  RoundStatus @default(NOT_OPENED)
+  /// A-15: pause automatic dispatch into this round without tearing anything
+  /// down. Matches already on a table are unaffected.
+  schedulingPaused Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  stage    Stage          @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  matches  Match[]
+  entrants RoundEntrant[]
+
+  @@unique([stageId, index])
+}
+
+/// Explicit, auditable membership: a team becomes an entrant of a round only
+/// when something says so — initial registration (E-7), a winner advancing
+/// (an explicit step the API takes on confirming a match, not an implicit
+/// recomputation), or a repêchage draw (A-9). This is what lets
+/// `waitingTeams()` in @beermacs/shared answer "who hasn't played yet in this
+/// round" (E-3) without reconstructing the whole match history every time.
+model RoundEntrant {
+  id      String  @id @default(cuid())
+  roundId String
+  teamId  String
+  /// True if this entry came from a repêchage draw (E-8/A-9) rather than
+  /// natural entry or advancement.
+  viaRepechage Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  round Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, teamId])
+  @@index([teamId])
+}
+
 // ─── Teams ──────────────────────────────────────────────────────────────────
 
 model Team {
   id           String @id @default(cuid())
   tournamentId String
   name         String
-  /// Registration order, NOT competitive seeding — the house format pairs round
-  /// one in the order teams signed up. Staff can drag to reorder before the
-  /// bracket is generated.
-  seed         Int
+
+  /// E-6/E-7: the round this team's participation starts at. Every team formed
+  /// before round 1 opens gets 1; a team added mid-tournament (A-7 — there is
+  /// no cut-off, A-8) gets whichever round was the lowest OPEN one the moment
+  /// it joined. Fixed at creation, never recomputed.
+  entryRound Int     @default(1)
+  /// A-8: the admin can remove a team at any point. Soft, not deleted — a
+  /// withdrawn team's match history stays intact for the bracket display.
+  withdrawn  Boolean @default(false)
 
   createdAt DateTime @default(now())
 
-  tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournament   Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   members      TeamMember[]
   groupMembers GroupMember[]
-  homeMatches  Match[]      @relation("HomeTeam")
-  awayMatches  Match[]      @relation("AwayTeam")
-  wonMatches   Match[]      @relation("Winner")
+  roundEntries RoundEntrant[]
+  homeMatches  Match[]       @relation("HomeTeam")
+  awayMatches  Match[]       @relation("AwayTeam")
+  wonMatches   Match[]       @relation("Winner")
   reports      MatchReport[]
+  chatChannels ChatChannel[]
   wonChampionship Tournament? @relation("Champion")
 
   @@unique([tournamentId, name])
-  @@index([tournamentId, seed])
+  @@index([tournamentId, entryRound])
 }
 
 model TeamMember {
@@ -394,30 +464,28 @@ model Match {
   id           String @id @default(cuid())
   tournamentId String
   stageId      String
+  roundId      String
   /// Set only for group-stage matches.
   groupId      String?
 
-  round    Int
   /// Index within the round, 0-based. Drives bracket layout.
   position Int
 
   homeTeamId String?
   awayTeamId String?
-  /// Re-entered from the lucky-loser pool. Rendered with a 🍀 in the bracket.
-  homeViaLuckyLoser Boolean @default(false)
-  awayViaLuckyLoser Boolean @default(false)
+  /// Re-entered via repêchage (A-9). Rendered with a 🍀 in the bracket.
+  homeViaRepechage Boolean @default(false)
+  awayViaRepechage Boolean @default(false)
 
   state MatchState @default(SCHEDULED)
 
   /// Written ONLY by the result transition in @beermacs/shared, called from a
   /// route handler. Never set directly from a client payload.
   winnerTeamId String?
+  /// Optional — U-11 only asks who won. Beer pong can still record a score;
+  /// a triangular or group format may have nothing to score at all.
   homeScore    Int?
   awayScore    Int?
-
-  /// A bye: one team, no opponent, auto-advanced. Kept as a real match so the
-  /// bracket renders a complete round and round planning needs no special case.
-  isBye Boolean @default(false)
 
   venueTableId String?
   /// When the dispatcher sent it to a table — drives the "you're up" push.
@@ -428,6 +496,7 @@ model Match {
 
   tournament Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   stage      Stage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  round      Round         @relation(fields: [roundId], references: [id], onDelete: Cascade)
   group      Group?        @relation(fields: [groupId], references: [id], onDelete: SetNull)
   homeTeam   Team?         @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: SetNull)
   awayTeam   Team?         @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: SetNull)
@@ -436,7 +505,7 @@ model Match {
   reports    MatchReport[]
   channel    ChatChannel?
 
-  @@unique([stageId, round, position])
+  @@unique([roundId, position])
   @@index([tournamentId, state])
   @@index([venueTableId])
 }
@@ -535,11 +604,20 @@ model News {
 // ─── Chat ───────────────────────────────────────────────────────────────────
 
 enum ChannelKind {
-  /// Everyone playing tonight.
+  /// Everyone playing tonight. U-9: only exists if the tournament's format
+  /// enables chat at all.
   TOURNAMENT
-  /// Auto-created when a match goes on a table, archived on settle.
+  /// U-8: auto-created when a match goes on a table, archived on settle.
+  /// Includes both teams' members — U-10 lets an admin read and post in any.
   MATCH
-  /// Staff write, everyone reads.
+  /// A-18: admin → one team.
+  TEAM
+  /// A-18/A-19: admin → one specific person, or a broadcast to everyone.
+  /// `recipientUserId` set = direct message; null = broadcast (A-19, and every
+  /// message in it triggers a push per that clause).
+  DIRECT
+  /// Staff write, everyone reads. Distinct from DIRECT-with-no-recipient only
+  /// in that it's a standing channel rather than a one-off send.
   BROADCAST
 }
 
@@ -548,15 +626,24 @@ model ChatChannel {
   tournamentId String
   kind         ChannelKind
   /// Set only for MATCH channels.
-  matchId      String?     @unique
+  matchId        String?     @unique
+  /// Set only for TEAM channels (A-18).
+  teamId         String?
+  /// Set only for DIRECT channels aimed at one person (A-18); null on a
+  /// DIRECT channel means the send target was "everyone" (A-19).
+  recipientUserId String?
   archivedAt   DateTime?
   createdAt    DateTime    @default(now())
 
   tournament Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   match      Match?        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team       Team?         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  recipient  User?         @relation("DirectMessageRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
   messages   ChatMessage[]
 
   @@index([tournamentId, kind])
+  @@index([teamId])
+  @@index([recipientUserId])
 }
 
 model ChatMessage {

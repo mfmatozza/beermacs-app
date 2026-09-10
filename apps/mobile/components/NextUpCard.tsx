@@ -7,11 +7,15 @@ import { Pressable, Text, View } from "react-native";
  */
 export default function NextUpCard({
   match,
+  roundIndex,
   tableLabel,
   opponent,
   onReport,
 }: {
   match: Match;
+  /** Match no longer carries a round number — only a roundId — so the caller
+   *  looks it up (it already has the Round list) and passes the index. */
+  roundIndex: number;
   tableLabel: string | null;
   opponent: string;
   onReport: () => void;
@@ -37,7 +41,7 @@ export default function NextUpCard({
         </View>
         <View className="flex-1" />
         <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-dim">
-          {`Round ${match.round}`}
+          {`Round ${roundIndex}`}
         </Text>
       </View>
 

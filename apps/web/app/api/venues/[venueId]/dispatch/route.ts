@@ -5,6 +5,10 @@
 // function the app calls to render the queue optimistically. One implementation,
 // two callers, and the authoritative one is behind a role check that the phone
 // cannot influence.
+//
+// Pairing brand-new matches out of a round's waiting pool (E-1/E-3) is a
+// separate, heavier endpoint — this one only ever hands tables to matches that
+// already exist and have both slots filled. See docs/ROADMAP.md.
 
 import { planDispatch, type Match, type VenueTable } from "@beermacs/shared";
 import { MatchState, Role, TableState, prisma } from "@beermacs/db";
@@ -17,24 +21,23 @@ export const runtime = "nodejs";
 /** Prisma rows → the domain shapes @beermacs/shared expects. */
 const toMatch = (m: {
   id: string;
-  round: number;
+  roundId: string;
   position: number;
   homeTeamId: string | null;
   awayTeamId: string | null;
-  homeViaLuckyLoser: boolean;
-  awayViaLuckyLoser: boolean;
+  homeViaRepechage: boolean;
+  awayViaRepechage: boolean;
   state: MatchState;
   winnerTeamId: string | null;
   homeScore: number | null;
   awayScore: number | null;
   venueTableId: string | null;
-  isBye: boolean;
 }): Match => ({
   id: m.id,
-  round: m.round,
+  roundId: m.roundId,
   position: m.position,
-  home: { teamId: m.homeTeamId, viaLuckyLoser: m.homeViaLuckyLoser },
-  away: { teamId: m.awayTeamId, viaLuckyLoser: m.awayViaLuckyLoser },
+  home: { teamId: m.homeTeamId, viaRepechage: m.homeViaRepechage },
+  away: { teamId: m.awayTeamId, viaRepechage: m.awayViaRepechage },
   state: (
     {
       SCHEDULED: "scheduled",
@@ -49,7 +52,6 @@ const toMatch = (m: {
   score:
     m.homeScore !== null && m.awayScore !== null ? { home: m.homeScore, away: m.awayScore } : null,
   tableId: m.venueTableId,
-  isBye: m.isBye,
 });
 
 const toTable = (t: {
@@ -70,9 +72,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ venueId
     await requireVenueRole(venueId, Role.VENUE_STAFF);
 
     const [rows, tableRows] = await Promise.all([
+      // Priority order is this function's job now, not buildQueue's (Match no
+      // longer carries a round NUMBER, only a roundId) — order by the round's
+      // own index, then position within it.
       prisma.match.findMany({
         where: { tournament: { venueId, status: "RUNNING" } },
-        orderBy: [{ round: "asc" }, { position: "asc" }],
+        orderBy: [{ round: { index: "asc" } }, { position: "asc" }],
       }),
       prisma.venueTable.findMany({ where: { venueId }, orderBy: { sortOrder: "asc" } }),
     ]);

@@ -20,8 +20,8 @@ const ctx = (actor: Actor, pending: PendingReport | null = null): ApprovalContex
 const onTable = () =>
   match({
     id: "m1",
-    home: { teamId: "hellas", viaLuckyLoser: false },
-    away: { teamId: "larp", viaLuckyLoser: false },
+    home: { teamId: "hellas", viaRepechage: false },
+    away: { teamId: "larp", viaRepechage: false },
     state: "on_table",
     tableId: "t3",
   });
@@ -92,7 +92,7 @@ describe("reporting a result", () => {
 
   it("will not accept a report on a match that is not on a table", () => {
     const r = transition(
-      played("m9", 1, 0, "hellas", "larp", "hellas"),
+      played("m9", "r1", 0, "hellas", "larp", "hellas"),
       { type: "report", winnerId: "hellas", score: score(10, 7) },
       ctx(captain("hellas"))
     );
@@ -196,8 +196,8 @@ describe("table assignment", () => {
   it("notifies both teams when a match goes on a table", () => {
     const scheduled = match({
       id: "m2",
-      home: { teamId: "hellas", viaLuckyLoser: false },
-      away: { teamId: "larp", viaLuckyLoser: false },
+      home: { teamId: "hellas", viaRepechage: false },
+      away: { teamId: "larp", viaRepechage: false },
       state: "queued",
     });
     const t = unwrap(transition(scheduled, { type: "assign_table", tableId: "t1" }, ctx(staff)));
@@ -211,7 +211,7 @@ describe("table assignment", () => {
   it("will not put a half-empty match on a table", () => {
     const half = match({
       id: "m3",
-      home: { teamId: "hellas", viaLuckyLoser: false },
+      home: { teamId: "hellas", viaRepechage: false },
       state: "scheduled",
     });
     const r = transition(half, { type: "assign_table", tableId: "t1" }, ctx(staff));

@@ -26,8 +26,8 @@ export type ApprovalEvent =
   | { readonly type: "assign_table"; readonly tableId: TableId }
   /** First cup thrown. */
   | { readonly type: "start" }
-  /** A captain claims a result. */
-  | { readonly type: "report"; readonly winnerId: TeamId; readonly score: Score }
+  /** A captain claims a result. `score` is optional — U-11 only asks who won. */
+  | { readonly type: "report"; readonly winnerId: TeamId; readonly score?: Score }
   /** The other captain agrees. */
   | { readonly type: "confirm" }
   /** The other captain disagrees. */
@@ -38,7 +38,7 @@ export type ApprovalEvent =
   | {
       readonly type: "staff_resolve";
       readonly winnerId: TeamId;
-      readonly score: Score;
+      readonly score?: Score;
       readonly reason: string;
     };
 
@@ -55,6 +55,11 @@ export type ApprovalError =
   | { readonly kind: "staff_only"; readonly event: ApprovalEvent["type"] }
   | { readonly kind: "incomplete_slots" }
   | { readonly kind: "implausible_score"; readonly score: Score };
+
+/** Format carries no score at all (a triangular/group format may not want one). */
+export interface NoScoreFormat {
+  readonly cupsToWin: null;
+}
 
 /**
  * The outcome of a transition: the new match, plus what the caller still has to
@@ -79,7 +84,7 @@ export type NotifyIntent =
 export interface PendingReport {
   readonly reportedByTeamId: TeamId;
   readonly winnerId: TeamId;
-  readonly score: Score;
+  readonly score: Score | null;
   readonly at: string;
 }
 
@@ -87,7 +92,8 @@ export interface ApprovalContext {
   readonly actor: Actor;
   /** Present whenever `match.state === 'reported' | 'disputed'`. */
   readonly pending: PendingReport | null;
-  readonly cupsToWin: number;
+  /** Null when this tournament's format does not score matches at all. */
+  readonly cupsToWin: number | null;
   /** Injected so the machine stays deterministic under test. */
   readonly now: string;
 }
@@ -107,7 +113,7 @@ export function transition(
     if (sideOf(match, event.winnerId) === null) {
       return err({ kind: "winner_not_in_match", teamId: event.winnerId });
     }
-    return ok(settle(match, event.winnerId, event.score, true));
+    return ok(settle(match, event.winnerId, event.score ?? null, true));
   }
 
   switch (event.type) {
@@ -147,16 +153,17 @@ export function transition(
       if (sideOf(match, event.winnerId) === null) {
         return err({ kind: "winner_not_in_match", teamId: event.winnerId });
       }
-      if (!plausible(event.score, ctx.cupsToWin)) {
+
+      if (event.score && ctx.cupsToWin !== null && !plausible(event.score, ctx.cupsToWin)) {
         return err({ kind: "implausible_score", score: event.score });
       }
       if (ctx.actor.kind === "captain" && sideOf(match, ctx.actor.teamId) === null) {
         return err({ kind: "not_in_match", teamId: ctx.actor.teamId });
       }
 
-      // Staff reporting a score settles it outright — there is nobody to argue
-      // with when the person behind the bar is standing at the table.
-      if (isStaff) return ok(settle(match, event.winnerId, event.score, true));
+      // Staff reporting settles it outright — there is nobody to argue with
+      // when the person behind the bar is standing at the table.
+      if (isStaff) return ok(settle(match, event.winnerId, event.score ?? null, true));
 
       const other = otherTeam(match, (ctx.actor as { teamId: TeamId }).teamId);
       return ok({
@@ -225,7 +232,7 @@ export function transition(
 
 // ── internals ───────────────────────────────────────────────────────────────
 
-function settle(match: Match, winnerId: TeamId, score: Score, forced: boolean): Transition {
+function settle(match: Match, winnerId: TeamId, score: Score | null, forced: boolean): Transition {
   const teams = [match.home.teamId, match.away.teamId].filter((t): t is TeamId => t !== null);
   return {
     match: { ...match, state: "confirmed", winnerId, score, tableId: null },

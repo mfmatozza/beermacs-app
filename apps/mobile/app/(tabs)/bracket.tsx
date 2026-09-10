@@ -1,16 +1,10 @@
-import {
-  buildQueue,
-  planDispatch,
-  roundLabel,
-  tableUtilisation,
-  type Match,
-} from "@beermacs/shared";
+import { buildQueue, planDispatch, tableUtilisation, type Match } from "@beermacs/shared";
 import { useMemo } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import QueueList from "../../components/QueueList";
 import TableStrip from "../../components/TableStrip";
-import { matches, tables, teamName, tournament, viewer } from "../../lib/fixtures";
+import { matches, rounds, tables, teamName, tournament, viewer } from "../../lib/fixtures";
 import { TAB_BAR_HEIGHT } from "../../lib/theme";
 
 /**
@@ -26,11 +20,12 @@ export default function BracketTab() {
 
   const derived = useMemo(() => {
     const plan = planDispatch(matches, tables);
+    const openRounds = rounds.filter((r) => r.status === "open").sort((a, b) => a.index - b.index);
     return {
       queue: buildQueue(matches, []),
       utilisation: tableUtilisation(matches, tables),
       readyToSend: plan.assignments.length,
-      roundMatches: matches.filter((m) => m.round === tournament.currentRound).length,
+      openRounds,
     };
   }, []);
 
@@ -47,11 +42,19 @@ export default function BracketTab() {
       showsVerticalScrollIndicator={false}
     >
       <View className="gap-1">
+        {/* A-14: several rounds can be open at once — no single "current
+            round" to name any more, so this lists all of them. */}
         <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
-          {roundLabel(derived.roundMatches, tournament.currentRound)}
+          {derived.openRounds.length > 0
+            ? `Round${derived.openRounds.length > 1 ? "s" : ""} ${derived.openRounds
+                .map((r) => r.index)
+                .join(" & ")} open`
+            : "Not started"}
         </Text>
         <Text className="font-sans text-[13px] text-cream-dim">
-          {`${tournament.name} · ${tournament.format.cupsToWin} cups to win`}
+          {`${tournament.name}${
+            tournament.format.cupsToWin ? ` · ${tournament.format.cupsToWin} cups to win` : ""
+          }`}
         </Text>
       </View>
 
@@ -90,6 +93,11 @@ export default function BracketTab() {
             describe={(id) => {
               const m = matches.find((x) => x.id === id);
               return m ? describeMatch(m) : "Unknown match";
+            }}
+            roundLabel={(id) => {
+              const m = matches.find((x) => x.id === id);
+              const r = rounds.find((x) => x.id === m?.roundId);
+              return r ? `R${r.index}` : "";
             }}
           />
         </View>

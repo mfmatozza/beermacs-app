@@ -9,9 +9,12 @@ import { Text, View } from "react-native";
 export default function QueueList({
   entries,
   describe,
+  roundLabel,
 }: {
   entries: readonly QueueEntry[];
   describe: (matchId: string) => string;
+  /** "R1", "R2" — the caller looks this up via its own Round list. */
+  roundLabel: (matchId: string) => string;
 }) {
   if (entries.length === 0) {
     return (
@@ -35,7 +38,7 @@ export default function QueueList({
             </Text>
             <View className="flex-1" />
             <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-              {`R${e.round}`}
+              {roundLabel(e.matchId)}
             </Text>
           </View>
         </Fragment>

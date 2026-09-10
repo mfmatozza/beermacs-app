@@ -1,34 +1,41 @@
 import type { Match, MatchId, TableId, VenueTable } from "./domain";
 
 /**
- * The table dispatcher.
+ * The table dispatcher: E-2 ("tables are assigned automatically, based on
+ * which tables are free") and the assignment half of E-3.
  *
- * "Table numbers" is the feature that sounds like a column and is actually a
- * scheduler: a bar has three tables and a bracket has sixteen matches, and the
- * thing a manager is buying is that nobody has to shout across the room.
+ * Pairing new matches from a round's waiting pool (rounds.ts, pairing.ts) is a
+ * separate step from handing out tables — this module only ever assigns tables
+ * to matches that already have both slots filled. That split is what lets a
+ * manually-paired match (A-16, no table yet) and a freshly auto-paired one
+ * queue for a table through the exact same path.
  *
- * Pure on purpose. It runs inside an edge function so two staff phones can't
+ * Pure on purpose. It runs inside a route handler so two staff phones can't
  * both hand Table 3 to a different match, and it runs on the client so the
  * queue can be rendered optimistically while the write is in flight.
  */
 
 /** A match is playable when both slots are filled and it isn't settled. */
 export function isPlayable(match: Match): boolean {
-  if (match.isBye) return false;
   if (match.state !== "scheduled" && match.state !== "queued") return false;
   return match.home.teamId !== null && match.away.teamId !== null;
 }
 
 export interface QueueEntry {
   readonly matchId: MatchId;
-  readonly round: number;
+  /** Position within its own round — for display grouping, not ordering here. */
   readonly position: number;
 }
 
 /**
- * Matches waiting for a table, in the order they should get one: earlier rounds
- * first, then bracket position. Staff reordering is applied by `pinned`, which
- * jumps matches to the front in the order given.
+ * Matches waiting for a table, in priority order.
+ *
+ * The base order is simply the order `matches` was given in — Match no longer
+ * carries a round *number* (only a `roundId`), so ordering across rounds is the
+ * caller's job: pass matches pre-sorted by round index ascending, then
+ * position, and this function will not disturb that. `pinned` jumps specific
+ * matches to the front, in the order given, which is the only reordering this
+ * function does itself.
  */
 export function buildQueue(
   matches: readonly Match[],
@@ -41,12 +48,10 @@ export function buildQueue(
     .sort((a, b) => {
       const pa = rank.get(a.id);
       const pb = rank.get(b.id);
-      if (pa !== undefined || pb !== undefined) {
-        return (pa ?? Number.MAX_SAFE_INTEGER) - (pb ?? Number.MAX_SAFE_INTEGER);
-      }
-      return a.round - b.round || a.position - b.position;
+      if (pa === undefined && pb === undefined) return 0;
+      return (pa ?? Number.MAX_SAFE_INTEGER) - (pb ?? Number.MAX_SAFE_INTEGER);
     })
-    .map((m) => ({ matchId: m.id, round: m.round, position: m.position }));
+    .map((m) => ({ matchId: m.id, position: m.position }));
 }
 
 export interface Assignment {

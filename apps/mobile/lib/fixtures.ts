@@ -1,5 +1,6 @@
 import newsOne from "../assets/news-1.jpg";
 import newsTwo from "../assets/news-2.jpg";
+import type { Round } from "@beermacs/shared";
 import {
   defaultFormat,
   type Match,
@@ -113,21 +114,26 @@ export const tournament: Tournament = {
   name: "Friday Night Cups",
   status: "running",
   joinCode: "4KQ7BM",
-  currentRound: 2,
   championId: null,
   format: { ...defaultFormat, cupsToWin: 10 },
 };
 
 export const teams: readonly Team[] = [
-  { id: "hellas", name: "Hellas", seed: 0 },
-  { id: "larp", name: "Larp Squad", seed: 1 },
-  { id: "bochas", name: "Los Bochas", seed: 2 },
-  { id: "schiuma", name: "Schiuma Boys", seed: 3 },
-  { id: "tavolo9", name: "Tavolo 9", seed: 4 },
-  { id: "ponggers", name: "The Ponggers", seed: 5 },
-  { id: "birrai", name: "Birrai Uniti", seed: 6 },
-  { id: "ultimi", name: "Ultimi Sorsi", seed: 7 },
-  { id: "nebbia", name: "Nebbia FC", seed: 8 },
+  { id: "hellas", name: "Hellas", entryRound: 1, withdrawn: false },
+  { id: "larp", name: "Larp Squad", entryRound: 1, withdrawn: false },
+  { id: "bochas", name: "Los Bochas", entryRound: 1, withdrawn: false },
+  { id: "schiuma", name: "Schiuma Boys", entryRound: 1, withdrawn: false },
+  { id: "tavolo9", name: "Tavolo 9", entryRound: 1, withdrawn: false },
+  { id: "ponggers", name: "The Ponggers", entryRound: 1, withdrawn: false },
+  { id: "birrai", name: "Birrai Uniti", entryRound: 1, withdrawn: false },
+  { id: "ultimi", name: "Ultimi Sorsi", entryRound: 1, withdrawn: false },
+  { id: "nebbia", name: "Nebbia FC", entryRound: 1, withdrawn: false },
+];
+
+/** Both open — round 2 started before round 1's odd leftover was resolved. */
+export const rounds: readonly Round[] = [
+  { id: "r1", stageId: "s1", index: 1, status: "open", schedulingPaused: false },
+  { id: "r2", stageId: "s1", index: 2, status: "open", schedulingPaused: false },
 ];
 
 export const tables: readonly VenueTable[] = [
@@ -137,14 +143,19 @@ export const tables: readonly VenueTable[] = [
   { id: "tb-4", label: "Patio", state: "closed", sortOrder: 3 },
 ];
 
-const slot = (teamId: string | null, viaLuckyLoser = false) => ({ teamId, viaLuckyLoser });
+const slot = (teamId: string | null, viaRepechage = false) => ({ teamId, viaRepechage });
 
-/** Round one done, round two under way — the state a bar is in at 22:30. */
+/**
+ * Round one settled except for a leftover (nine teams, so one team can't be
+ * paired) that staff manually advanced into round two rather than waiting on a
+ * repêchage that has nobody in the pool to draw yet — a realistic use of the
+ * admin's manual-pairing override (A-16). Round two is under way.
+ */
 export const matches: readonly Match[] = [
-  // Round 1 — all settled. Nine teams, so 'nebbia' took a bye.
+  // Round 1
   {
     id: "r1m0",
-    round: 1,
+    roundId: "r1",
     position: 0,
     home: slot("hellas"),
     away: slot("larp"),
@@ -152,11 +163,10 @@ export const matches: readonly Match[] = [
     winnerId: "hellas",
     score: { home: 10, away: 6 },
     tableId: null,
-    isBye: false,
   },
   {
     id: "r1m1",
-    round: 1,
+    roundId: "r1",
     position: 1,
     home: slot("bochas"),
     away: slot("schiuma"),
@@ -164,11 +174,10 @@ export const matches: readonly Match[] = [
     winnerId: "bochas",
     score: { home: 10, away: 9 },
     tableId: null,
-    isBye: false,
   },
   {
     id: "r1m2",
-    round: 1,
+    roundId: "r1",
     position: 2,
     home: slot("tavolo9"),
     away: slot("ponggers"),
@@ -176,11 +185,10 @@ export const matches: readonly Match[] = [
     winnerId: "ponggers",
     score: { home: 4, away: 10 },
     tableId: null,
-    isBye: false,
   },
   {
     id: "r1m3",
-    round: 1,
+    roundId: "r1",
     position: 3,
     home: slot("birrai"),
     away: slot("ultimi"),
@@ -188,25 +196,12 @@ export const matches: readonly Match[] = [
     winnerId: "birrai",
     score: { home: 10, away: 8 },
     tableId: null,
-    isBye: false,
-  },
-  {
-    id: "r1m4",
-    round: 1,
-    position: 4,
-    home: slot("nebbia"),
-    away: slot(null),
-    state: "confirmed",
-    winnerId: "nebbia",
-    score: null,
-    tableId: null,
-    isBye: true,
   },
 
-  // Round 2 — five winners, so one match is waiting on a lucky-loser pick.
+  // Round 2 — four round-1 winners, plus nebbia advanced manually.
   {
     id: "r2m0",
-    round: 2,
+    roundId: "r2",
     position: 0,
     home: slot("hellas"),
     away: slot("bochas"),
@@ -214,11 +209,10 @@ export const matches: readonly Match[] = [
     winnerId: null,
     score: null,
     tableId: "tb-3",
-    isBye: false,
   },
   {
     id: "r2m1",
-    round: 2,
+    roundId: "r2",
     position: 1,
     home: slot("ponggers"),
     away: slot("birrai"),
@@ -226,11 +220,10 @@ export const matches: readonly Match[] = [
     winnerId: null,
     score: null,
     tableId: null,
-    isBye: false,
   },
   {
     id: "r2m2",
-    round: 2,
+    roundId: "r2",
     position: 2,
     home: slot("nebbia"),
     away: slot(null),
@@ -238,7 +231,6 @@ export const matches: readonly Match[] = [
     winnerId: null,
     score: null,
     tableId: null,
-    isBye: false,
   },
 ];
 

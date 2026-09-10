@@ -17,18 +17,35 @@ app put its rules in a React hook and its permissions in a modal, which meant
 "both teams must approve the result" was a promise the UI made and the database
 happily ignored.
 
-Concretely:
+Concretely (rebuilt against `brand/beermacs-feature-spec.md` — see
+docs/DECISIONS.md D9, which supersedes the earlier house-format description
+this section used to have):
 
-- `bracket.ts` — the house format. Round one pairs in registration order (no
-  shuffle), an odd count gives the last team a bye, rounds are generated one at
-  a time, and losers drop into a pool staff can draw from to fill an odd slot.
-- `approval.ts` — the result state machine. `transition()` is the only way a
-  match acquires a winner. It refuses to let the reporting team confirm its own
-  report, treats silence as a dispute rather than as agreement, and lets staff
-  force any transition while flagging it `forced` so the caller must write an
-  audit row.
-- `dispatcher.ts` — table assignment. A bar has three tables and a bracket has
-  sixteen matches; this is a constrained-resource queue, not a column.
+- `rounds.ts` — a round's own lifecycle. A round starts `not_opened`; opening
+  one is an explicit admin action (A-13), and there is no `closed` state — the
+  spec never asks a round to shut, and "no fixed cut-off" for adding teams
+  (A-8) reads as "an open round stays a valid target forever." `RoundEntrant`
+  rows (in `packages/db`) are how a team's membership in a round is recorded —
+  explicitly, at the moment it happens (initial registration, a winner
+  advancing, a repêchage draw) — never reconstructed after the fact from match
+  history. `waitingTeams()` answers E-3's "who hasn't played yet in this round."
+- `pairing.ts` — random pairing (E-1), a Fisher–Yates shuffle over whoever's
+  waiting.
+- `repechage.ts` — the loser pool, derived from match history the same way the
+  old lucky-loser pool was (never stored, so it can't drift), plus drawing a
+  team back in either automatically on an odd count (E-8) or by an admin's own
+  choice at any time (A-9/A-10).
+- `dispatcher.ts` — handing free tables to matches that already have both slots
+  filled (E-2). Pairing brand-new matches out of a round's waiting pool is a
+  separate step (`pairing.ts` + `rounds.ts`) — this module only ever assigns
+  tables, which is what lets a manually-paired match (A-16) and a freshly
+  auto-paired one queue for a table through the exact same path.
+- `approval.ts` — the result state machine (U-11..14). `transition()` is the
+  only way a match acquires a winner. It refuses to let the reporting team
+  confirm its own report, treats silence as a dispute rather than as
+  agreement, and lets staff force any transition (A-12) while flagging it
+  `forced` so the caller must write an audit row. Score is optional — the spec
+  only asks who won (U-11); a triangular or group format may not score at all.
 - `join-code.ts` — Crockford Base32, so a code read aloud in a loud room
   survives the trip.
 
