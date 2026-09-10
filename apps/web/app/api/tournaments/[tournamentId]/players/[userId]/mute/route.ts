@@ -27,6 +27,9 @@ export async function POST(
 
     const body = await parseBody(req, mutePlayerInput);
 
+    const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!target) throw new HttpError(404, "user_not_found");
+
     await prisma.mutedPlayer.upsert({
       where: { tournamentId_userId: { tournamentId, userId } },
       create: { tournamentId, userId, mutedById: viewer.userId, reason: body.reason },

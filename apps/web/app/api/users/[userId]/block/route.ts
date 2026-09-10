@@ -17,6 +17,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ userId
     const viewer = await requireViewer();
     if (blockedUserId === viewer.userId) throw new HttpError(422, "cannot_block_self");
 
+    const target = await prisma.user.findUnique({
+      where: { id: blockedUserId },
+      select: { id: true },
+    });
+    if (!target) throw new HttpError(404, "user_not_found");
+
     await prisma.blockedUser.upsert({
       where: { blockerUserId_blockedUserId: { blockerUserId: viewer.userId, blockedUserId } },
       create: { blockerUserId: viewer.userId, blockedUserId },
