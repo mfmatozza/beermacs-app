@@ -17,6 +17,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { bearer } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { prisma } from "@beermacs/db";
+import { sendEmail } from "./email";
 
 function buildAuth() {
   if (!process.env.BETTER_AUTH_SECRET) {
@@ -41,6 +42,20 @@ function buildAuth() {
       disableSignUp: false,
       minPasswordLength: 10,
       requireEmailVerification: false,
+      // `url` already carries the reset token as a query param and points at
+      // Better Auth's own /api/auth/reset-password/:token — the mobile app's
+      // reset screen (app/reset-password.tsx) reads the token back out of it
+      // rather than this constructing a beermacs:// link by hand, so there is
+      // exactly one place that assembles a reset URL.
+      sendResetPassword: async ({ user, url }) => {
+        await sendEmail({
+          to: user.email,
+          subject: "Reset your Beermacs password",
+          html: `<p>Someone asked to reset the password on this Beermacs account.</p>
+<p><a href="${url}">Tap here to set a new password</a>. If this wasn't you, ignore this email.</p>
+<p>This link expires in 1 hour.</p>`,
+        });
+      },
     },
 
     user: {

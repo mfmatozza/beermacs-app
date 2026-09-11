@@ -1,187 +1,449 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { isCompleteJoinCode, joinCodeLength, normaliseJoinCode } from "@beermacs/shared";
-import { ApiError, api } from "../lib/api";
-import { nearbyVenues, news, viewer } from "../lib/fixtures";
-import { registerForPush } from "../lib/push";
+import { type MeResponse, api } from "../lib/api";
+import { usePendingTournamentStore } from "../lib/pending-tournament";
 import { raw, TAB_BAR_HEIGHT } from "../lib/theme";
+import { findMyNextUp, toNextUpState } from "../lib/next-up";
+import { useCurrentTeam } from "../lib/use-current-team";
+import { useJoinTournament } from "../lib/use-join-tournament";
 import AmbientBeer from "./AmbientBeer";
 import GlowLogo from "./GlowLogo";
-import NewsFeed from "./NewsFeed";
-import VenuePicker from "./VenuePicker";
+import NextUpCard from "./NextUpCard";
 
 /**
- * Home asks one question: which bar are you at?
+ * Home asks one question: are you in a tournament right now?
  *
- * It does NOT assume a venue. Even with an active registration, the picker is
- * the primary content — you might have walked to a different bar, and the app
- * having decided for you is worse than one tap. What is happening inside a
- * tournament lives on the Bracket tab.
- *
- * Below the picker: the announcement feed, carrying both a venue's posts and
- * platform-wide news from us.
+ * No venue picker, no news feed, no "nearby bars" — a player who isn't at a
+ * bar tonight has no reason to open this screen, and one who is already knows
+ * which bar they're standing in. The only jobs left are: get into a
+ * tournament (code, and — once expo-camera lands, see docs/DECISIONS.md —
+ * QR/deep-link), then, once in, show what's happening right now, which lives
+ * on the Bracket tab in detail but gets its own summary card here so a player
+ * never has to leave Home to see whether they're up.
  */
-function joinErrorMessage(code: string): string {
-  switch (code) {
-    case "unknown_code":
-      return "No tournament with that code. Check the table tent.";
-    case "registration_not_open":
-      return "That tournament hasn't opened for registration yet.";
-    case "tournament_finished":
-      return "That tournament has already finished.";
-    case "not_signed_in":
-      return "Couldn't reach the bar's tournament. Check your connection.";
-    default:
-      return "Couldn't join just now. Try again in a moment.";
-  }
-}
-
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const [query, setQuery] = useState("");
-  const [code, setCode] = useState("");
-  const [joining, setJoining] = useState(false);
-  const [joinError, setJoinError] = useState<string | null>(null);
+  const { myTeam, me, isLoading: meLoading } = useCurrentTeam();
+  const pending = usePendingTournamentStore((s) => s.pending);
+  const hydrated = usePendingTournamentStore((s) => s.hydrated);
+  const setPending = usePendingTournamentStore((s) => s.setPending);
 
-  const join = useCallback(async () => {
-    setJoining(true);
-    setJoinError(null);
-    try {
-      await api.join({ code, displayName: viewer.displayName });
-      setCode("");
-      // Ask for notification permission right here, not at sign-up — this is
-      // the first moment the app has something worth paging you about (U-15:
-      // "you have to play"), which is exactly the placement
-      // docs/APP_STORE_COMPLIANCE.md's push section calls for over asking on
-      // first launch before the user has done anything.
-      void registerForPush();
-    } catch (e) {
-      setJoinError(joinErrorMessage(e instanceof ApiError ? e.code : "unknown"));
-    } finally {
-      setJoining(false);
-    }
-  }, [code]);
+  // A team forms — resolving the pending pointer — from either this device
+  // (the create/join calls below clear it directly) or another one entirely
+  // (a teammate captains it). Either way, once /api/me shows a team, the
+  // pending pointer is stale; drop it rather than let it shadow real state.
+  useEffect(() => {
+    if (myTeam && pending) setPending(null);
+  }, [myTeam, pending, setPending]);
 
-  // Platform posts first, then the rest newest-first. Our announcements are the
-  // reason a player who is not at a bar tonight still opens the app.
-  const feed = useMemo(
-    () =>
-      [...news].sort(
-        (a, b) =>
-          Number(a.venueId !== null) - Number(b.venueId !== null) ||
-          b.publishedAt.localeCompare(a.publishedAt)
-      ),
-    []
-  );
+  const loading = meLoading || !hydrated;
 
   return (
     <View className="flex-1 bg-stout-900">
       <AmbientBeer />
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          // The glow canvas around the mark is transparent, so the mark's own
-          // top edge sits well inside it — clear the notch with room to spare.
-          paddingTop: insets.top + 20,
-          paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
-        }}
-        contentContainerClassName="gap-7 px-4"
-        showsVerticalScrollIndicator={false}
-        alwaysBounceHorizontal={false}
-      >
-        {/* ── the mark, lit ─────────────────────────────────────────────── */}
-        <View className="items-center">
-          <GlowLogo size={104} />
-          <Text className="-mt-3 font-display text-4xl uppercase tracking-[1.6px] text-cream">
-            Beermacs
-          </Text>
-          <Text className="mt-1 font-sans-med text-[11px] uppercase tracking-[1.4px] text-beer-400">
-            Where are you drinking?
-          </Text>
+      {loading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color={raw.beer} />
         </View>
-
-        {/* ── pick your bar ─────────────────────────────────────────────── */}
-        <VenuePicker
-          venues={nearbyVenues}
-          query={query}
-          onQueryChange={setQuery}
-          onPick={() => {}}
-        />
-
-        {/* ── or type the code off the table ───────────────────────────── */}
-        <JoinBox code={code} onChange={setCode} onSubmit={join} busy={joining} error={joinError} />
-
-        {/* ── news, ours and the bars' ─────────────────────────────────── */}
-        <View className="gap-2">
-          <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-            What&rsquo;s on
-          </Text>
-          <NewsFeed items={feed} />
-        </View>
-      </ScrollView>
+      ) : myTeam ? (
+        <ActiveTournamentHome myTeam={myTeam} insets={insets} />
+      ) : pending ? (
+        <TeamSetupHome pending={pending} insets={insets} onAbandon={() => setPending(null)} />
+      ) : (
+        <JoinHome me={me} insets={insets} />
+      )}
     </View>
   );
 }
 
-/**
- * Join straight into a tournament with the code off the table tent, skipping the
- * picker. Normalises as you type — Crockford Base32 folds O→0, I/L→1 and U→V —
- * so a code read aloud across a loud room still lands.
- */
-function JoinBox({
-  code,
-  onChange,
-  onSubmit,
-  busy,
-  error,
-}: {
-  code: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-  busy: boolean;
-  error: string | null;
-}) {
-  const complete = isCompleteJoinCode(code);
+// ── State 1: not in anything ────────────────────────────────────────────────
+
+function JoinHome({ me, insets }: { me: MeResponse | undefined; insets: { top: number; bottom: number } }) {
+  const [code, setCode] = useState("");
+  const { join, joining, error, clearError } = useJoinTournament(me?.user.displayName);
+
+  const submit = useCallback(async () => {
+    if (await join(code)) setCode("");
+  }, [join, code]);
+
   return (
-    <View className="gap-2 rounded-2xl border border-glow-edge bg-glow-soft p-4">
-      <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-400">
-        Already at a table? Type the code
-      </Text>
-      <TextInput
-        value={code}
-        onChangeText={(v) => onChange(normaliseJoinCode(v))}
-        placeholder={"·".repeat(joinCodeLength)}
-        placeholderTextColor={raw.textFaint}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        maxLength={joinCodeLength}
-        returnKeyType="go"
-        onSubmitEditing={onSubmit}
-        accessibilityLabel="Tournament join code"
-        className="rounded-lg border border-stout-500 bg-stout-900/70 px-4 py-3 text-center font-sans-bold text-2xl tabular-nums tracking-[8px] text-cream"
-      />
-      {error ? (
-        <Text className="font-sans text-[13px] leading-[19px] text-dispute">{error}</Text>
-      ) : null}
-      <Pressable
-        onPress={onSubmit}
-        disabled={!complete || busy}
-        accessibilityRole="button"
-        accessibilityLabel="Join tournament"
-        accessibilityState={{ disabled: !complete || busy, busy }}
-        className={`min-h-[48px] items-center justify-center rounded-lg bg-beer-500 px-6 active:opacity-70 ${
-          complete && !busy ? "" : "opacity-40"
-        }`}
-      >
-        {busy ? (
-          <ActivityIndicator size="small" color={raw.canvas} />
-        ) : (
-          <Text className="font-display text-xl uppercase tracking-[0.8px] text-stout-900">
-            Join
+    <ScrollView
+      className="flex-1"
+      contentContainerStyle={{
+        paddingTop: insets.top + 20,
+        paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
+      }}
+      contentContainerClassName="flex-1 justify-center gap-8 px-5"
+      showsVerticalScrollIndicator={false}
+    >
+      <View className="items-center gap-1">
+        <GlowLogo size={104} />
+        <Text className="-mt-3 font-display text-4xl uppercase tracking-[1.6px] text-cream">
+          Beermacs
+        </Text>
+        <Text className="mt-1 max-w-[260px] text-center font-sans text-[13px] leading-[19px] text-cream-dim">
+          Not in a tournament right now. Get the code from your table and you&rsquo;re in.
+        </Text>
+      </View>
+
+      <View className="gap-2 rounded-2xl border border-glow-edge bg-glow-soft p-4">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-400">
+          Enter tournament code
+        </Text>
+        <TextInput
+          value={code}
+          onChangeText={(v) => {
+            clearError();
+            setCode(normaliseJoinCode(v));
+          }}
+          placeholder={"·".repeat(joinCodeLength)}
+          placeholderTextColor={raw.textFaint}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={joinCodeLength}
+          returnKeyType="go"
+          onSubmitEditing={submit}
+          accessibilityLabel="Tournament join code"
+          className="rounded-lg border border-stout-500 bg-stout-900/70 px-4 py-3 text-center font-sans-bold text-2xl tabular-nums tracking-[8px] text-cream"
+        />
+        {error ? (
+          <Text className="font-sans text-[13px] leading-[19px] text-dispute">{error}</Text>
+        ) : null}
+        <Pressable
+          onPress={submit}
+          disabled={!isCompleteJoinCode(code) || joining}
+          accessibilityRole="button"
+          accessibilityLabel="Join tournament"
+          accessibilityState={{ disabled: !isCompleteJoinCode(code) || joining, busy: joining }}
+          className={`min-h-[48px] items-center justify-center rounded-lg bg-beer-500 px-6 active:opacity-70 ${
+            isCompleteJoinCode(code) && !joining ? "" : "opacity-40"
+          }`}
+        >
+          {joining ? (
+            <ActivityIndicator size="small" color={raw.canvas} />
+          ) : (
+            <Text className="font-display text-xl uppercase tracking-[0.8px] text-stout-900">
+              Join tournament
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
+}
+
+// ── State 2: joined a tournament, no team yet ───────────────────────────────
+
+function TeamSetupHome({
+  pending,
+  insets,
+  onAbandon,
+}: {
+  pending: { tournamentId: string; tournamentName: string; venueName: string | null };
+  insets: { top: number; bottom: number };
+  onAbandon: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const setPending = usePendingTournamentStore((s) => s.setPending);
+
+  // The pending pointer has no server row backing it (see lib/pending-tournament.ts) —
+  // if the tournament ended, was canceled, or simply doesn't exist any more
+  // between joining and forming a team, this is the one place that finds out,
+  // via the same public board read the Bracket tab uses.
+  const boardQuery = useQuery({
+    queryKey: ["board", pending.tournamentId],
+    queryFn: () => api.board(pending.tournamentId),
+    retry: false,
+  });
+  useEffect(() => {
+    if (boardQuery.isError) onAbandon();
+    else if (boardQuery.data && boardQuery.data.status !== "REGISTRATION" && boardQuery.data.status !== "RUNNING") {
+      onAbandon();
+    }
+  }, [boardQuery.isError, boardQuery.data, onAbandon]);
+
+  const [teamName, setTeamName] = useState("");
+  const createMutation = useMutation({
+    mutationFn: () => api.createTeam(pending.tournamentId, { name: teamName.trim() }),
+    onSuccess: () => {
+      setPending(null);
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+
+  const [teamCode, setTeamCode] = useState("");
+  const joinMutation = useMutation({
+    mutationFn: () => api.joinTeam({ code: teamCode }),
+    onSuccess: () => {
+      setPending(null);
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+
+  return (
+    <ScrollView
+      className="flex-1"
+      contentContainerStyle={{
+        paddingTop: insets.top + 24,
+        paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
+      }}
+      contentContainerClassName="gap-6 px-5"
+      showsVerticalScrollIndicator={false}
+    >
+      <View className="gap-1">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-400">
+          {pending.venueName ?? "You're in"}
+        </Text>
+        <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
+          {pending.tournamentName}
+        </Text>
+        <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
+          One step left — form your team, or join one a teammate already started.
+        </Text>
+      </View>
+
+      <View className="gap-2 rounded-2xl border border-stout-600 bg-stout-850 p-4">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+          Create a team
+        </Text>
+        <TextInput
+          value={teamName}
+          onChangeText={(v) => {
+            createMutation.reset();
+            setTeamName(v);
+          }}
+          placeholder="Team name"
+          placeholderTextColor={raw.textFaint}
+          maxLength={40}
+          returnKeyType="done"
+          accessibilityLabel="Team name"
+          className="rounded-lg border border-stout-500 bg-stout-900/70 px-4 py-3 font-sans-med text-[15px] text-cream"
+        />
+        {createMutation.isError ? (
+          <Text className="font-sans text-[13px] leading-[19px] text-dispute">
+            Couldn&rsquo;t create that team. Try again in a moment.
           </Text>
-        )}
-      </Pressable>
-    </View>
+        ) : null}
+        <Pressable
+          onPress={() => createMutation.mutate()}
+          disabled={teamName.trim().length === 0 || createMutation.isPending}
+          accessibilityRole="button"
+          accessibilityLabel="Create team"
+          className={`min-h-[48px] items-center justify-center rounded-lg bg-beer-500 px-6 active:opacity-70 ${
+            teamName.trim().length > 0 && !createMutation.isPending ? "" : "opacity-40"
+          }`}
+        >
+          {createMutation.isPending ? (
+            <ActivityIndicator size="small" color={raw.canvas} />
+          ) : (
+            <Text className="font-display text-lg uppercase tracking-[0.6px] text-stout-900">
+              Create team
+            </Text>
+          )}
+        </Pressable>
+      </View>
+
+      <View className="flex-row items-center gap-3">
+        <View className="h-px flex-1 bg-stout-600" />
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+          or
+        </Text>
+        <View className="h-px flex-1 bg-stout-600" />
+      </View>
+
+      <View className="gap-2 rounded-2xl border border-stout-600 bg-stout-850 p-4">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+          Join a teammate&rsquo;s team
+        </Text>
+        <TextInput
+          value={teamCode}
+          onChangeText={(v) => {
+            joinMutation.reset();
+            setTeamCode(normaliseJoinCode(v));
+          }}
+          placeholder={"·".repeat(joinCodeLength)}
+          placeholderTextColor={raw.textFaint}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={joinCodeLength}
+          returnKeyType="go"
+          accessibilityLabel="Team join code"
+          className="rounded-lg border border-stout-500 bg-stout-900/70 px-4 py-3 text-center font-sans-bold text-xl tabular-nums tracking-[6px] text-cream"
+        />
+        {joinMutation.isError ? (
+          <Text className="font-sans text-[13px] leading-[19px] text-dispute">
+            No team with that code in this tournament.
+          </Text>
+        ) : null}
+        <Pressable
+          onPress={() => joinMutation.mutate()}
+          disabled={!isCompleteJoinCode(teamCode) || joinMutation.isPending}
+          accessibilityRole="button"
+          accessibilityLabel="Join team"
+          className={`min-h-[48px] items-center justify-center rounded-lg border border-stout-500 bg-transparent px-6 active:opacity-70 ${
+            isCompleteJoinCode(teamCode) && !joinMutation.isPending ? "" : "opacity-40"
+          }`}
+        >
+          {joinMutation.isPending ? (
+            <ActivityIndicator size="small" color={raw.textFaint} />
+          ) : (
+            <Text className="font-display text-lg uppercase tracking-[0.6px] text-cream">
+              Join team
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
+}
+
+// ── State 3: in a tournament, on a team ─────────────────────────────────────
+
+function ActiveTournamentHome({
+  myTeam,
+  insets,
+}: {
+  myTeam: NonNullable<ReturnType<typeof useCurrentTeam>["myTeam"]>;
+  insets: { top: number; bottom: number };
+}) {
+  const queryClient = useQueryClient();
+  const tournamentId = myTeam.team.tournament.id;
+
+  const boardQuery = useQuery({
+    queryKey: ["board", tournamentId],
+    queryFn: () => api.board(tournamentId),
+    refetchInterval: 3000,
+  });
+  const staffQuery = useQuery({
+    queryKey: ["staff-messages", tournamentId],
+    queryFn: () => api.staffMessages(tournamentId),
+    refetchInterval: 15000,
+  });
+
+  const invalidateBoard = () => {
+    void queryClient.invalidateQueries({ queryKey: ["board", tournamentId] });
+  };
+  const reportMutation = useMutation({
+    mutationFn: (vars: { matchId: string; winnerId: string }) =>
+      api.reportMatch(vars.matchId, { winnerId: vars.winnerId }),
+    onSuccess: invalidateBoard,
+  });
+  const confirmMutation = useMutation({
+    mutationFn: (matchId: string) => api.confirmMatch(matchId),
+    onSuccess: invalidateBoard,
+  });
+  const rejectMutation = useMutation({
+    mutationFn: (matchId: string) => api.rejectMatch(matchId, {}),
+    onSuccess: invalidateBoard,
+  });
+
+  const mine = useMemo(() => {
+    if (!boardQuery.data) return null;
+    return findMyNextUp(boardQuery.data.stages, myTeam.team.id);
+  }, [boardQuery.data, myTeam.team.id]);
+
+  const nextUpState = useMemo(() => {
+    if (!mine) return null;
+    return toNextUpState(mine, myTeam.team.id, {
+      reporting: reportMutation.isPending,
+      confirmBusy: confirmMutation.isPending || rejectMutation.isPending,
+      onReport: (winnerIsMe) => {
+        if (mine.kind !== "match") return;
+        const opponentTeamId =
+          mine.match.home?.teamId === myTeam.team.id
+            ? mine.match.away?.teamId
+            : mine.match.home?.teamId;
+        const winnerId = winnerIsMe ? myTeam.team.id : (opponentTeamId ?? myTeam.team.id);
+        reportMutation.mutate({ matchId: mine.match.id, winnerId });
+      },
+      onConfirm: () => {
+        if (mine.kind === "match") confirmMutation.mutate(mine.match.id);
+      },
+      onDispute: () => {
+        if (mine.kind === "match") rejectMutation.mutate(mine.match.id);
+      },
+    });
+  }, [mine, myTeam.team.id, reportMutation, confirmMutation, rejectMutation]);
+
+  const latestStaffMessage = staffQuery.data?.messages.at(-1) ?? null;
+
+  return (
+    <ScrollView
+      className="flex-1"
+      contentContainerStyle={{
+        paddingTop: insets.top + 16,
+        paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
+      }}
+      contentContainerClassName="gap-5 px-5"
+      showsVerticalScrollIndicator={false}
+    >
+      <View className="gap-1">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-400">
+          {myTeam.team.name}
+        </Text>
+        <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
+          {myTeam.team.tournament.name}
+        </Text>
+      </View>
+
+      {boardQuery.isLoading ? (
+        <ActivityIndicator color={raw.beer} />
+      ) : nextUpState && mine ? (
+        <NextUpCard state={nextUpState} roundIndex={mine.roundIndex} />
+      ) : (
+        <View className="gap-1 rounded-2xl border border-stout-600 bg-stout-700 p-4">
+          <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
+            No match on the board for {myTeam.team.name} yet — check back once the round opens.
+          </Text>
+        </View>
+      )}
+
+      {latestStaffMessage ? (
+        <View className="gap-1 rounded-2xl border border-stout-600 bg-stout-850 p-4">
+          <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+            From the bar
+          </Text>
+          <Text className="font-sans text-[13px] leading-[19px] text-cream">
+            {latestStaffMessage.body}
+          </Text>
+        </View>
+      ) : null}
+
+      <View className="flex-row gap-3">
+        <QuickLink label="Full bracket" onPress={() => router.navigate("/bracket")} />
+        <QuickLink label="Tournament chat" onPress={() => router.navigate("/chat")} />
+      </View>
+
+      <View className="gap-1 rounded-2xl border border-stout-600 bg-stout-850 p-4">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
+          Invite teammates
+        </Text>
+        <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
+          Share this code — anyone at the venue can use it to join {myTeam.team.name}.
+        </Text>
+        <Text className="mt-1 self-start rounded-lg border border-stout-500 bg-stout-900/70 px-4 py-2 font-sans-bold text-xl tabular-nums tracking-[6px] text-cream">
+          {myTeam.team.joinCode}
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+function QuickLink({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className="min-h-[44px] flex-1 items-center justify-center rounded-lg border border-stout-500 bg-transparent px-4 active:opacity-70"
+    >
+      <Text className="font-sans-med text-[13px] uppercase tracking-[0.8px] text-cream">
+        {label}
+      </Text>
+    </Pressable>
   );
 }

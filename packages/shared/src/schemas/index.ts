@@ -263,8 +263,38 @@ export type MutePlayerInput = z.infer<typeof mutePlayerInput>;
  * reinstalled device should notify its current owner, not whoever last
  * registered it.
  */
+/**
+ * Payload for PUT /api/me/avatar. A data URI, not a multipart upload or a
+ * pointer to third-party object storage — there's no blob store provisioned
+ * for this app (see that route's own comment), and a profile photo, cropped
+ * square and JPEG-compressed on-device before it ever leaves the phone, is
+ * small enough to just live in the same `User.image` column Better Auth
+ * already has. The length cap is on the encoded string (≈1.4x the binary
+ * size), generous enough for a ~1.5MB compressed square photo.
+ */
+export const updateAvatarInput = z.object({
+  image: z
+    .string()
+    .startsWith("data:image/")
+    .max(2_200_000, "Image is too large — try a different photo"),
+});
+export type UpdateAvatarInput = z.infer<typeof updateAvatarInput>;
+
 export const pushRegisterInput = z.object({
   expoPushToken: z.string().min(1),
   platform: z.enum(["IOS", "ANDROID"]),
 });
 export type PushRegisterInput = z.infer<typeof pushRegisterInput>;
+
+/**
+ * Payload for PATCH /api/push/preferences — the two opt-out categories
+ * `apps/web/lib/notify.ts`'s `PushCategory` actually checks. Omitted fields
+ * are left as they were (or default-enabled, for a device with no row yet);
+ * this is a partial update, not a full replace, so toggling one switch on
+ * Profile can't silently reset the other.
+ */
+export const pushPreferencesInput = z.object({
+  match: z.boolean().optional(),
+  news: z.boolean().optional(),
+});
+export type PushPreferencesInput = z.infer<typeof pushPreferencesInput>;

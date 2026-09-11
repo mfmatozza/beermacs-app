@@ -7,10 +7,13 @@
 import type {
   CreateTeamInput,
   CreateTournamentInput,
+  JoinTeamInput,
   JoinTournamentInput,
+  PushPreferencesInput,
   RejectResultInput,
   ReportResultInput,
   SetRoundSchedulingInput,
+  UpdateAvatarInput,
 } from "@beermacs/shared";
 import { authClient } from "./auth-client";
 import { API_URL } from "./config";
@@ -54,7 +57,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // because they are response shapes, not rules — see docs/ARCHITECTURE.md.
 
 export interface MeResponse {
-  readonly user: { id: string; displayName: string; email: string; phone: string };
+  readonly user: {
+    id: string;
+    displayName: string;
+    email: string;
+    phone: string;
+    image: string | null;
+  };
   readonly memberships: readonly {
     role: string;
     venue: { id: string; name: string; slug: string; city: string | null };
@@ -64,6 +73,7 @@ export interface MeResponse {
     team: {
       id: string;
       name: string;
+      joinCode: string;
       tournament: { id: string; name: string; status: string; venueId: string };
     };
   }[];
@@ -183,8 +193,35 @@ export interface ChatMessage {
   readonly flaggedAt: string | null;
 }
 
+export interface TournamentHistoryEntry {
+  readonly tournamentId: string;
+  readonly tournamentName: string;
+  readonly venueName: string;
+  readonly venueCity: string | null;
+  readonly endedAt: string | null;
+  readonly teamName: string;
+  readonly wins: number;
+  readonly losses: number;
+}
+
+export interface NotificationPreferences {
+  readonly match: boolean;
+  readonly news: boolean;
+}
+
 export const api = {
   me: () => request<MeResponse>("/api/me"),
+  history: () => request<{ entries: readonly TournamentHistoryEntry[] }>("/api/me/history"),
+  setAvatar: (body: UpdateAvatarInput) =>
+    request<{ image: string }>("/api/me/avatar", { method: "PUT", body: JSON.stringify(body) }),
+  removeAvatar: () => request<{ image: null }>("/api/me/avatar", { method: "DELETE" }),
+  notificationPreferences: () =>
+    request<NotificationPreferences>("/api/push/preferences"),
+  setNotificationPreferences: (body: PushPreferencesInput) =>
+    request<{ ok: boolean }>("/api/push/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   join: (body: JoinTournamentInput) =>
     request<JoinResponse>("/api/tournaments/join", {
       method: "POST",
@@ -200,8 +237,13 @@ export const api = {
   tournamentDetail: (tournamentId: string) =>
     request<TournamentDetail>(`/api/tournaments/${tournamentId}`),
   createTeam: (tournamentId: string, body: CreateTeamInput) =>
-    request<{ id: string; name: string; entryRound: number }>(
+    request<{ id: string; name: string; entryRound: number; joinCode: string }>(
       `/api/tournaments/${tournamentId}/teams`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  joinTeam: (body: JoinTeamInput) =>
+    request<{ team: { id: string; name: string }; tournament: { id: string; name: string } }>(
+      "/api/teams/join",
       { method: "POST", body: JSON.stringify(body) }
     ),
   openRound: (stageId: string, index: number) =>
