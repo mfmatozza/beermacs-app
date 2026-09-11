@@ -17,6 +17,7 @@ import type {
 } from "@beermacs/shared";
 import { authClient } from "./auth-client";
 import { API_URL } from "./config";
+import { TimeoutError, withTimeout } from "./with-timeout";
 
 export class ApiError extends Error {
   constructor(
@@ -31,14 +32,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // The expo client keeps the session in SecureStore, so reading it is async.
   const cookie = await authClient.getCookie();
 
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(cookie ? { Cookie: cookie } : {}),
-      ...init?.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await withTimeout(
+      fetch(`${API_URL}${path}`, {
+        ...init,
+        headers: {
+          "content-type": "application/json",
+          ...(cookie ? { Cookie: cookie } : {}),
+          ...init?.headers,
+        },
+      })
+    );
+  } catch (e) {
+    // A dead network never rejects fetch() on its own on some hosts/proxies —
+    // this is what turns "spins forever" into an error a screen can show
+    // (every caller already handles a thrown ApiError; see e.g.
+    // use-join-tournament.ts's joinErrorMessage default branch).
+    throw new ApiError(0, e instanceof TimeoutError ? "network_timeout" : "network_error");
+  }
 
   if (!res.ok) {
     let code = `http_${res.status}`;

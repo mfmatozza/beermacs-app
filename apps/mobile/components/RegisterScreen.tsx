@@ -16,9 +16,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { authClient } from "../lib/auth-client";
 import { type CountryCode, defaultCountry } from "../lib/country-codes";
 import { raw } from "../lib/theme";
+import { networkErrorMessage, withTimeout } from "../lib/with-timeout";
 import AmbientBeer from "./AmbientBeer";
 import CountryCodePicker from "./CountryCodePicker";
 import GlowLogo from "./GlowLogo";
+
+// Every branch below calls `withTimeout` around the network call and runs
+// inside try/catch/finally — without that, a request that never resolves (a
+// dead network with no OS-level failure, a captive portal swallowing the
+// connection) left `busy` true forever: an infinite spinner with no way out
+// and no error explaining why. `networkErrorMessage` is what turns that into
+// an explicit, user-visible message instead.
 
 /** Where forgot-password emails send people back to (D16-adjacent: see
  *  apps/web/lib/auth.ts's sendResetPassword). Handled inline by this same
@@ -104,13 +112,18 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
         return;
       }
       setBusy(true);
-      const res = await authClient.signIn.email(parsed.data);
-      setBusy(false);
-      if (res.error) {
-        setError(res.error.message ?? "Couldn't sign in. Check your email and password.");
-        return;
+      try {
+        const res = await withTimeout(authClient.signIn.email(parsed.data));
+        if (res.error) {
+          setError(res.error.message ?? "Couldn't sign in. Check your email and password.");
+          return;
+        }
+        onAuthenticated();
+      } catch (e) {
+        setError(networkErrorMessage(e));
+      } finally {
+        setBusy(false);
       }
-      onAuthenticated();
       return;
     }
 
@@ -121,16 +134,20 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
         return;
       }
       setBusy(true);
-      const res = await authClient.requestPasswordReset({
-        email: parsed.data,
-        redirectTo: RESET_PASSWORD_REDIRECT,
-      });
-      setBusy(false);
-      if (res.error) {
-        setError(res.error.message ?? "Couldn't send that email. Try again in a moment.");
-        return;
+      try {
+        const res = await withTimeout(
+          authClient.requestPasswordReset({ email: parsed.data, redirectTo: RESET_PASSWORD_REDIRECT })
+        );
+        if (res.error) {
+          setError(res.error.message ?? "Couldn't send that email. Try again in a moment.");
+          return;
+        }
+        switchMode("forgot_sent");
+      } catch (e) {
+        setError(networkErrorMessage(e));
+      } finally {
+        setBusy(false);
       }
-      switchMode("forgot_sent");
       return;
     }
 
@@ -148,20 +165,27 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
         return;
       }
       setBusy(true);
-      const res = await authClient.resetPassword({ newPassword: password, token: resetToken });
-      setBusy(false);
-      if (res.error) {
-        setError(res.error.message ?? "That reset link has expired. Request a new one.");
-        return;
+      try {
+        const res = await withTimeout(
+          authClient.resetPassword({ newPassword: password, token: resetToken })
+        );
+        if (res.error) {
+          setError(res.error.message ?? "That reset link has expired. Request a new one.");
+          return;
+        }
+        setPassword("");
+        setConfirmPassword("");
+        setResetToken(null);
+        // Order matters: switchMode clears `notice` as part of resetting the
+        // screen for the new mode, so the message it should carry INTO that
+        // mode has to be set after, not before.
+        switchMode("signin");
+        setNotice("Password updated — sign in with your new password.");
+      } catch (e) {
+        setError(networkErrorMessage(e));
+      } finally {
+        setBusy(false);
       }
-      setPassword("");
-      setConfirmPassword("");
-      setResetToken(null);
-      // Order matters: switchMode clears `notice` as part of resetting the
-      // screen for the new mode, so the message it should carry INTO that
-      // mode has to be set after, not before.
-      switchMode("signin");
-      setNotice("Password updated — sign in with your new password.");
       return;
     }
 
@@ -178,26 +202,32 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
       return;
     }
     setBusy(true);
-    // Built as a variable, not passed as an object literal: the mobile client
-    // isn't type-linked to the server's `auth` instance (separate app), so TS
-    // only knows the base signUp.email shape and would apply excess-property
-    // checking to a literal. Better Auth's additional fields (displayName,
-    // phone — see apps/web/lib/auth.ts) still reach the server at runtime
-    // either way; this only works around the compile-time check.
-    const payload = {
-      email: parsed.data.email,
-      password: parsed.data.password,
-      name: parsed.data.displayName,
-      displayName: parsed.data.displayName,
-      phone: parsed.data.phone,
-    };
-    const res = await authClient.signUp.email(payload);
-    setBusy(false);
-    if (res.error) {
-      setError(res.error.message ?? "Couldn't create that account.");
-      return;
+    try {
+      // Built as a variable, not passed as an object literal: the mobile
+      // client isn't type-linked to the server's `auth` instance (separate
+      // app), so TS only knows the base signUp.email shape and would apply
+      // excess-property checking to a literal. Better Auth's additional
+      // fields (displayName, phone — see apps/web/lib/auth.ts) still reach
+      // the server at runtime either way; this only works around the
+      // compile-time check.
+      const payload = {
+        email: parsed.data.email,
+        password: parsed.data.password,
+        name: parsed.data.displayName,
+        displayName: parsed.data.displayName,
+        phone: parsed.data.phone,
+      };
+      const res = await withTimeout(authClient.signUp.email(payload));
+      if (res.error) {
+        setError(res.error.message ?? "Couldn't create that account.");
+        return;
+      }
+      onAuthenticated();
+    } catch (e) {
+      setError(networkErrorMessage(e));
+    } finally {
+      setBusy(false);
     }
-    onAuthenticated();
   }, [
     mode,
     email,

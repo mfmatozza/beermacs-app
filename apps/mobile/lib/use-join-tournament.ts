@@ -20,6 +20,10 @@ export function joinErrorMessage(code: string): string {
       return "That tournament has already finished.";
     case "not_signed_in":
       return "Couldn't reach the bar's tournament. Check your connection.";
+    case "network_timeout":
+      return "Taking too long to reach the server. Check your connection and try again.";
+    case "network_error":
+      return "Couldn't reach the server. Check your connection and try again.";
     default:
       return "Couldn't join just now. Try again in a moment.";
   }

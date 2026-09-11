@@ -18,6 +18,7 @@ import { api, type MeResponse } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import { useSessionStore } from "../lib/session-store";
 import { raw, TAB_BAR_HEIGHT } from "../lib/theme";
+import { networkErrorMessage, withTimeout } from "../lib/with-timeout";
 
 /**
  * Account, stats, notification preferences, security, sign-out, and
@@ -48,7 +49,14 @@ export default function ProfileScreen() {
   }, [historyQuery.data]);
 
   const signOut = useCallback(async () => {
-    await authClient.signOut();
+    // Clears local session regardless of whether the server call itself
+    // succeeds — "sign me out" should never leave someone stuck signed in
+    // just because the network hung (see with-timeout.ts's own doc comment).
+    try {
+      await withTimeout(authClient.signOut());
+    } catch {
+      // Local sign-out below still happens.
+    }
     setSignedIn(false);
   }, [setSignedIn]);
 
@@ -136,21 +144,26 @@ function AccountCard({ me }: { me: MeResponse }) {
   const save = useCallback(async () => {
     setSaving(true);
     setSaveError(null);
-    // Built as a variable, not an object literal: same reason RegisterScreen's
-    // signUp.email payload is — the mobile client isn't type-linked to the
-    // server's `auth` instance, so TS only knows the base updateUser shape
-    // and would apply excess-property checking to a literal. `displayName`/
-    // `phone` (Better Auth additionalFields, see apps/web/lib/auth.ts) still
-    // reach the server at runtime either way.
-    const payload = { name: displayName.trim(), displayName: displayName.trim(), phone: phone.trim() };
-    const res = await authClient.updateUser(payload);
-    setSaving(false);
-    if (res.error) {
-      setSaveError(res.error.message ?? "Couldn't save those changes.");
-      return;
+    try {
+      // Built as a variable, not an object literal: same reason RegisterScreen's
+      // signUp.email payload is — the mobile client isn't type-linked to the
+      // server's `auth` instance, so TS only knows the base updateUser shape
+      // and would apply excess-property checking to a literal. `displayName`/
+      // `phone` (Better Auth additionalFields, see apps/web/lib/auth.ts) still
+      // reach the server at runtime either way.
+      const payload = { name: displayName.trim(), displayName: displayName.trim(), phone: phone.trim() };
+      const res = await withTimeout(authClient.updateUser(payload));
+      if (res.error) {
+        setSaveError(res.error.message ?? "Couldn't save those changes.");
+        return;
+      }
+      setEditing(false);
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    } catch (e) {
+      setSaveError(networkErrorMessage(e));
+    } finally {
+      setSaving(false);
     }
-    setEditing(false);
-    void queryClient.invalidateQueries({ queryKey: ["me"] });
   }, [displayName, phone, queryClient]);
 
   const pickAvatar = useCallback(async () => {
@@ -370,16 +383,21 @@ function SecuritySection() {
       return;
     }
     setBusy(true);
-    const res = await authClient.changePassword({ currentPassword: current, newPassword: next });
-    setBusy(false);
-    if (res.error) {
-      setError(res.error.message ?? "Couldn't change your password. Check your current one.");
-      return;
+    try {
+      const res = await withTimeout(authClient.changePassword({ currentPassword: current, newPassword: next }));
+      if (res.error) {
+        setError(res.error.message ?? "Couldn't change your password. Check your current one.");
+        return;
+      }
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+      setNotice("Password changed.");
+    } catch (e) {
+      setError(networkErrorMessage(e));
+    } finally {
+      setBusy(false);
     }
-    setCurrent("");
-    setNext("");
-    setConfirm("");
-    setNotice("Password changed.");
   }, [current, next, confirm]);
 
   return (
@@ -482,13 +500,18 @@ function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
             void (async () => {
               setBusy(true);
               setError(null);
-              const res = await authClient.deleteUser({ password });
-              setBusy(false);
-              if (res.error) {
-                setError(res.error.message ?? "Couldn't delete your account. Check your password.");
-                return;
+              try {
+                const res = await withTimeout(authClient.deleteUser({ password }));
+                if (res.error) {
+                  setError(res.error.message ?? "Couldn't delete your account. Check your password.");
+                  return;
+                }
+                onDeleted();
+              } catch (e) {
+                setError(networkErrorMessage(e));
+              } finally {
+                setBusy(false);
               }
-              onDeleted();
             })();
           },
         },

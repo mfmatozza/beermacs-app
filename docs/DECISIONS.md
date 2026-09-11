@@ -574,3 +574,36 @@ see the build log if this note is being read before it finished.
 account, `PUT /api/me/avatar` with a real (tiny) PNG data URI, confirmed
 `GET /api/me` reflects it, `DELETE /api/me/avatar` clears it back to `null`,
 deleted the test account after.
+
+---
+
+## D20 — Every network call in RegisterScreen/ProfileScreen now times out and surfaces an explicit error
+
+Direct feedback, 2026-09-11: a TestFlight tester hit "stuck on loading"
+after tapping sign-up, with no error shown. Traced it: production's
+`/api/auth/sign-up/email` itself responds fine and fast (verified directly),
+and no sign-up request reached the database in the relevant window — so the
+request died somewhere on the device/network without ever resolving. The
+code had no defense against exactly that: every `authClient.*` call in
+`RegisterScreen.tsx` and `ProfileScreen.tsx` was `await`ed directly, with no
+timeout and (for several of them) no try/catch, so a hung promise left
+`busy` true forever — an infinite spinner with no way out.
+
+`use-app-boot.ts` already had this exact pattern solved for the boot
+sequence (`timing.bootTimeoutMs`, "never hang on boot") — this extends the
+same idea to every later network action instead of just the first one.
+Added `lib/with-timeout.ts` (`withTimeout`, `networkErrorMessage`) and wired
+it into every branch of `RegisterScreen`'s `submit` (sign-in, forgot,
+reset, register), `ProfileScreen`'s profile-save, change-password,
+delete-account, and sign-out, and `lib/api.ts`'s shared `request()` (so
+every plain `api.*` call — join, create/join team, report a result, etc. —
+gets the same protection for free). Sign-out clears local session state
+even if the server call itself times out, since "sign me out" shouldn't be
+able to leave someone stuck signed in.
+
+**Not yet confirmed as THE root cause** of the reported hang — could still
+be a real network condition (bad wifi, a captive portal) that this doesn't
+fix so much as make visible. But the missing timeout/error-handling was a
+real, independently worth-fixing gap regardless of whether it explains this
+specific report, and now every one of these screens fails loud instead of
+silent.
