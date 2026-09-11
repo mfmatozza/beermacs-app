@@ -607,3 +607,48 @@ fix so much as make visible. But the missing timeout/error-handling was a
 real, independently worth-fixing gap regardless of whether it explains this
 specific report, and now every one of these screens fails loud instead of
 silent.
+
+---
+
+## D21 — Root cause found: every TestFlight build was silently pointed at a developer's home LAN IP
+
+The real bug behind D20's "stuck on loading" reports (build after build,
+sign-in AND sign-up, still failing after the timeout fix landed). Traced by
+checking Vercel's request logs directly during a live failed attempt: zero
+requests arrived — not a slow response, not a 500, *nothing reached
+Vercel's edge at all*. That ruled out the backend entirely and pointed at
+the request never leaving the device.
+
+`apps/mobile/lib/config.ts` has always preferred `EXPO_PUBLIC_API_URL`
+(from `apps/mobile/.env.local`, gitignored) over `app.config.ts`'s
+per-profile `extra.apiUrl`, specifically so local dev-client iteration can
+repoint the API without a native rebuild. `.env.local` on this machine holds
+`EXPO_PUBLIC_API_URL=http://10.37.0.82:3000` — this developer's home LAN
+IP, plain HTTP, for talking to a locally-run `apps/web`.
+
+The leak: `.easignore`'s mere presence makes EAS Build ignore `.gitignore`
+**entirely** for archiving — it only excluded `apps/mobile/.env`, not
+`.env.local`. So every `eas build --profile production` uploaded
+`.env.local` right along with the rest of the project, Metro inlined
+`EXPO_PUBLIC_API_URL` into the release JS bundle at build time exactly as
+it would in dev, and **every TestFlight build since this app existed has
+shipped hardwired to a private IP unreachable from any network but this
+one** — explaining "works on simulator" (shares the Mac's network stack)
+vs. every real-device failure, and why the symptom reads as a hang: a
+packet to an unreachable RFC1918 address from an outside network typically
+gets silently dropped rather than instantly refused, so the OS's own
+connect timeout (tens of seconds) fires before anything else does.
+
+**Fixed in two independent places**, deliberately not just one:
+- `.easignore`: `apps/mobile/.env` widened to `apps/mobile/.env*`, so no
+  local env file of any kind can ride along into a cloud build again.
+- `lib/config.ts`: `EXPO_PUBLIC_API_URL` is now only honored when
+  `__DEV__` is true. `.easignore` stops the leak at the source; `__DEV__`
+  means a *future* leak of the same shape still can't redirect a release
+  build, since `__DEV__` is false in every EAS build profile regardless of
+  what env files happen to be present.
+
+**Revisit when**: never, ideally — but if a build ever again silently fails
+to reach the API, check `vercel logs` FIRST (whether the request arrived at
+all) before assuming it's a backend bug, exactly what should have narrowed
+this down faster.

@@ -11,6 +11,14 @@ apps/web
 apps/mobile/ios
 apps/mobile/android
 
-# Never let a local dev-only env file leak into a cloud build (use .env.local
-# instead, which Expo's own convention already keeps out of EAS Build).
-apps/mobile/.env
+# Never let a local dev-only env file leak into a cloud build. THIS FILE'S
+# PRESENCE MAKES EAS IGNORE .gitignore ENTIRELY for archiving purposes — a
+# gitignored apps/mobile/.env.local (EXPO_PUBLIC_API_URL pointing at a LAN
+# IP for local dev-client iteration) was NOT covered by the old, narrower
+# `apps/mobile/.env` line here, so it rode along into every EAS Build
+# archive and got inlined into the production JS bundle by Metro, silently
+# overriding app.config.ts's own per-profile API_URL. See docs/DECISIONS.md
+# D21 and lib/config.ts's own __DEV__ guard (the second, independent half of
+# this fix — this file only stops it from being uploaded in the first
+# place).
+apps/mobile/.env*
