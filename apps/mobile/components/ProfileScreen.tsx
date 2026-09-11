@@ -100,6 +100,18 @@ export default function ProfileScreen() {
             <Text className="font-sans text-[13px] text-beer-400">View →</Text>
           </Pressable>
 
+          {meQuery.data.memberships.some((m) => m.role === "VENUE_ADMIN" || m.role === "VENUE_OWNER") ? (
+            <Pressable
+              onPress={() => router.push("/admin")}
+              accessibilityRole="button"
+              accessibilityLabel="Manage a venue"
+              className="min-h-[48px] flex-row items-center justify-between rounded-2xl border border-beer-500/40 bg-beer-500/10 px-4 active:opacity-70"
+            >
+              <Text className="font-sans-med text-[14px] text-cream">Manage a venue</Text>
+              <Text className="font-sans text-[13px] text-beer-400">Open →</Text>
+            </Pressable>
+          ) : null}
+
           <NotificationPreferences />
           <SecuritySection />
 
