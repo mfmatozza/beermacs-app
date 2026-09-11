@@ -14,6 +14,7 @@ export interface Viewer {
   readonly displayName: string;
   readonly email: string;
   readonly phone: string;
+  readonly image: string | null;
 }
 
 /** The signed-in user, or null. Reads the cookie or the Bearer token. */
@@ -29,6 +30,7 @@ export async function currentViewer(): Promise<Viewer | null> {
     displayName: u.displayName ?? u.name ?? "Player",
     email: u.email,
     phone: u.phone ?? "",
+    image: u.image ?? null,
   };
 }
 

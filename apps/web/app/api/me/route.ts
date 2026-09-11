@@ -31,6 +31,7 @@ export async function GET() {
           select: {
             id: true,
             name: true,
+            joinCode: true,
             tournament: { select: { id: true, name: true, status: true, venueId: true } },
           },
         },
@@ -43,6 +44,7 @@ export async function GET() {
         displayName: viewer.displayName,
         email: viewer.email,
         phone: viewer.phone,
+        image: viewer.image,
       },
       memberships,
       // Only tournaments still in play; History reads the rest.

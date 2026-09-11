@@ -371,3 +371,206 @@ new against the current `apps/web`, and don't assume its current shape
 
 **Revisit when:** the 2026-09-11 conversation happens — this entry should
 be superseded by whatever comes out of it, not left standing alongside it.
+
+---
+
+## D16 — Home rebuilt around "am I in a tournament", per beermacs-claude-code-prompt.md
+
+The old Home (venue picker + news feed + "type the code") assumed browsing
+for a bar; the new spec (`~/Downloads/beermacs-claude-code-prompt.md`, handed
+over 2026-09-10) is explicit that a player already knows which bar they're
+in and Home's only jobs are: get into a tournament, then show what's
+happening in it. Rebuilt `HomeScreen.tsx` around three states —
+not-in-anything (code entry), joined-but-no-team (create/join team), and
+active (NextUpCard + quick links + invite code) — and deleted
+`VenuePicker`/`NewsFeed`/`VenueList`/`lib/fixtures.ts`, none of which had any
+other caller once Home stopped using them.
+
+**"Joined but no team" has no server row.** `/api/tournaments/join` only
+grants a `VenueMembership` (see that route's own header comment) — team
+formation is a separate step, and a player can force-quit between the two.
+Rather than add a schema just to represent a transient client-side waiting
+room, this is a Zustand store persisted to `expo-secure-store`
+(`lib/pending-tournament.ts`) — already a dependency, via the auth session —
+keyed off nothing from the server. Home revalidates it against the public
+board endpoint on every mount (tournament could have ended, or been
+canceled, between joining and forming a team) and drops it silently if
+stale, rather than surfacing a dead-end error.
+
+**Deep link built, QR deferred.** U-3 asks for three join methods: numeric
+code, QR scan, and a link. The link (`app/join/[code].tsx`, scheme
+`beermacs://join/<code>`) needed nothing beyond a new expo-router file — the
+scheme is already registered and the route calls the exact same join hook
+the code box uses. QR needs `expo-camera`, which isn't a dependency yet, and
+adding it means another native rebuild (same category of change as the push
+notifications work earlier this session — see the "lazy-import" entry
+above). Not done in this pass; the numeric code and the link cover joining
+today, and QR is additive once that rebuild happens.
+
+**Also added while touching this path**: `Team.joinCode` is now returned by
+`GET /api/me` (it wasn't selected before) and shown on Home's active state
+so a captain can read it aloud or show the screen — the only way a
+teammate's "join a team" code was reachable before was the create-team
+response, which is gone the moment the screen unmounts.
+
+**Not done in this pass** (still open from the spec): sign-in/sign-up
+redesign (password show/hide, forgot-password, phone country-code split),
+server-side email hardening (normalization/verification/rate-limiting),
+Profile screen redesign, bottom-nav audit, team-size capping, and the
+spec's ~19 test scenarios. Functional/backend gaps (tournament ending, team
+join codes) were prioritized first per the standing instruction to finish
+function before visual polish.
+
+**Revisit when:** `expo-camera` is added for QR — at that point fold it into
+the same join flow `use-join-tournament.ts` already centralizes, don't
+build a second parallel join path.
+
+---
+
+## D17 — Sign-in/sign-up rebuilt: show/hide password, confirm password, phone country-code split, forgot/reset password
+
+Second item off `beermacs-claude-code-prompt.md`'s list, same session as D16.
+All in `RegisterScreen.tsx` since it already owned the register/signin mode
+toggle — forgot/reset became two more modes of the same screen rather than
+new routes, for a reason worth recording: **RootLayout renders this screen
+INSTEAD of `<Stack>` while signed out** (`{signedIn ? <Stack /> : <RegisterScreen />}`
+in `app/_layout.tsx`), so a `beermacs://reset-password` link tapped by a
+signed-out user — the only user who'd ever tap one — has no mounted Stack
+for expo-router to navigate into. `app/join/[code].tsx` (D16) gets away with
+being a real route because joining assumes you're already signed in; a
+password reset is the one flow that's inherently signed-out, so it can't
+use the same pattern.
+
+**Fix**: `RegisterScreen` listens for that link itself, with `expo-linking`'s
+`getInitialURL`/`addEventListener('url', ...)` directly rather than through
+expo-router navigation, and switches its own local `mode` state to `"reset"`.
+Self-contained and works regardless of whether a Stack exists.
+
+**Forgot-password needed an email to actually send** — nothing in this app
+sends email yet. Added `apps/web/lib/email.ts`, a thin wrapper around
+Resend's HTTP API (no SDK — same reasoning as `lib/push.ts`'s raw fetch to
+Expo), wired into `emailAndPassword.sendResetPassword` in `lib/auth.ts`.
+**Gated on `RESEND_API_KEY`, which is not set anywhere yet** — without it,
+`sendEmail` logs the reset link to the server console instead of sending,
+so the flow is fully testable in dev with zero setup, but nothing reaches a
+real inbox until that key exists as a Vercel env var. Verified live against
+the dev server: `POST /api/auth/request-password-reset` with an unknown
+email correctly hits Better Auth's timing-attack-safe not-found branch and
+returns 200 without calling `sendEmail` — the code path for a real user
+wasn't exercised against a live inbox for the same reason (no key yet).
+
+**Phone country-code picker** (`lib/country-codes.ts` +
+`CountryCodePicker.tsx`) is a curated ~49-country list (Italy first — this
+app's home market — then the rest of the EU, then everywhere large enough
+to matter), not every ISO code; searchable by name or dial code, as the
+spec asked. Stored phone is still just `dial + digits` concatenated — the
+server-side `phone` field (`registerInput`) is unchanged, still a loose
+`min(4).max(24)` string (see its own comment on why: no OTP exists to
+validate against). The picker only changes *how* it's typed, not what's
+validated.
+
+**Not done in this pass**: server-side email hardening (normalization
+beyond the schema's existing `.trim().toLowerCase()`, duplicate-account
+prevention via normalized comparison, registration/resend cooldowns, rate
+limiting) — `registerInput`'s email schema already lowercases/trims, so
+duplicate detection is already normalized-comparison in practice (Postgres
+unique constraint on the lowercased value), but no rate limiting exists
+anywhere in this app yet, for any endpoint. Profile screen redesign, bottom
+nav audit, and the spec's test scenarios are also still open.
+
+**Revisit when**: `RESEND_API_KEY` is set in Vercel — nothing else needs to
+change for reset emails to start actually sending.
+
+---
+
+## D18 — Profile rebuilt; History goes from permanent placeholder to real data; notification preferences wired end-to-end
+
+Third item off `beermacs-claude-code-prompt.md`. Three things landed together
+because they share data:
+
+**History (`app/(tabs)/history.tsx`)** was a permanent `ComingSoon` naming a
+specific blocker: "needs tournaments to be archived rather than deleted —
+the original app wiped its tables." That blocker is gone — tournaments now
+reach `COMPLETE` and stay (D16's `/api/tournaments/:id/end`) — so this reads
+real rows from a new `GET /api/me/history`. **Deliberately shows a W-L
+record, not a claimed placement** ("you finished 2nd"): computing a real
+final standing generically across `single_elimination`,
+`group_then_knockout`, and `triangular` means walking each format's own
+bracket shape to find "the final," and getting that wrong would show a
+player a made-up result. A confirmed-match win/loss count is something this
+route can state correctly for any format; that's the line drawn for this
+pass.
+
+**Profile** (`ProfileScreen.tsx`) gained: an avatar (initials, no photo
+upload — not asked for), inline name/phone editing via
+`authClient.updateUser` (works against the existing `additionalFields` with
+no new server code — see its own comment on why the payload is built as a
+variable, same TS workaround as `RegisterScreen`'s `signUp.email` call),
+an email-verified/unverified badge with a "Verify email" action (reuses
+D17's Resend wrapper — `emailAndPassword.sendVerificationEmail` is now
+wired the same way `sendResetPassword` is, same `RESEND_API_KEY` gate),
+tournament/win/loss stat boxes (aggregated client-side from the same
+history call, not a second endpoint), a change-password form
+(`authClient.changePassword`), and the existing sign-out/delete-account
+kept as-is.
+
+**Notification preferences turned out to be half-built already.**
+`Device.preferences: Json` existed from Phase 5 with a doc comment
+describing exactly this ("per-category opt-outs... a player who mutes
+announcements must still get 'you're up'") but nothing ever read it — every
+push in `lib/notify.ts` went to every registered device regardless. Added
+`PushCategory` ("match" | "news"), threaded it through every
+`tokensForTeams`/`tokensForUsers`/`tokensForTournamentPlayers` call site
+(staff dispute pushes stay uncategorized on purpose — see the function's own
+comment), and added `GET`/`PATCH /api/push/preferences`, which — because
+preference lives per-device, not per-user — applies a PATCH to every device
+row the viewer currently has. A device that registers later (reinstall, new
+phone) starts back at all-enabled; that's the existing `@default("{}")`
+behavior, not a new gap.
+
+**Verified live against the dev server**, not just typechecked: registered
+a throwaway account, confirmed `GET /api/me` returns `emailVerified`,
+`GET /api/me/history` returns `{entries: []}` for a brand-new account,
+`GET/PATCH /api/push/preferences` round-trips correctly with zero devices
+registered (the PATCH is a no-op transaction over an empty list, not an
+error), and `POST /api/auth/request-password-reset` produced the
+`[email:dev-fallback]` console line from D17. Deleted the test account
+afterward — nothing left in the real database from this check.
+
+**Not done in this pass**: bottom-nav audit and the spec's test scenarios
+are what's left of the original checklist.
+
+---
+
+## D19 — Email verification reverted; profile picture added
+
+User call, 2026-09-10, right after D18 shipped: no email verification.
+Removed everything D18 added for it — the verified/unverified badge and
+"Verify email" button in `ProfileScreen.tsx`, `emailVerification.sendVerificationEmail`
+in `lib/auth.ts`, and `emailVerified` from `Viewer`/`GET /api/me`. Back to
+D10/D11's original stance with nothing left over. The `sendEmail` wrapper
+and `RESEND_API_KEY` gate (D17) stay — the reset-password flow still needs
+them.
+
+**Profile picture**, same request. `User.image` already existed (Better
+Auth's default field, previously unused). Stored as a **data URI directly
+in that column**, not in an object store: this app has no blob storage
+provisioned, and provisioning one (Vercel Blob, to match "Vercel+Neon
+only") is a setup step nobody's taken yet — same category of gap as
+`RESEND_API_KEY`. Rather than block the feature on that, the photo is
+cropped square and JPEG-compressed to `quality: 0.5` on-device
+(`expo-image-picker`'s own editor) before it ever leaves the phone, capped
+at ~2.2MB encoded server-side (`updateAvatarInput`). Real, working today;
+swapping in a blob store later only changes what URL ends up in `image`,
+nothing about the client contract.
+
+**Added `expo-image-picker`** — a new native module, so this needed the
+same category of step as the push-notification work: `app.config.ts` plugin
+declaration (with the required `NSPhotoLibraryUsageDescription` string) and
+an `expo run:ios --device` rebuild. Ran that rebuild as part of this change;
+see the build log if this note is being read before it finished.
+
+**Verified end-to-end against the dev server**: registered a throwaway
+account, `PUT /api/me/avatar` with a real (tiny) PNG data URI, confirmed
+`GET /api/me` reflects it, `DELETE /api/me/avatar` clears it back to `null`,
+deleted the test account after.

@@ -48,6 +48,12 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-notifications",
     [
+      "expo-image-picker",
+      {
+        photosPermission: "Beermacs uses your photo library to set your profile picture.",
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         image: "./assets/splash-icon.png",

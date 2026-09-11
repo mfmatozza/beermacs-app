@@ -11,13 +11,18 @@ import type { NotifyIntent } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { sendPushToTokens } from "./push";
 
-async function tokensForTeams(teamIds: readonly string[]): Promise<string[]> {
+/** The two categories a player can opt out of from Profile — see Device's
+ *  own `preferences` doc comment. "Dispute" pushes (staff-only) aren't a
+ *  category here: staff didn't ask for those, they're part of the job. */
+export type PushCategory = "match" | "news";
+
+async function tokensForTeams(teamIds: readonly string[], category: PushCategory): Promise<string[]> {
   if (teamIds.length === 0) return [];
   const members = await prisma.teamMember.findMany({
     where: { teamId: { in: [...teamIds] } },
     select: { userId: true },
   });
-  return tokensForUsers(members.map((m) => m.userId));
+  return tokensForUsers(members.map((m) => m.userId), category);
 }
 
 /**
@@ -29,30 +34,45 @@ async function tokensForTeams(teamIds: readonly string[]): Promise<string[]> {
  * bracket screen — a player who joined but hasn't formed a team yet isn't
  * reachable here either).
  */
-async function tokensForTournamentPlayers(tournamentId: string): Promise<string[]> {
+async function tokensForTournamentPlayers(
+  tournamentId: string,
+  category: PushCategory
+): Promise<string[]> {
   const members = await prisma.teamMember.findMany({
     where: { team: { tournamentId } },
     select: { userId: true },
   });
-  return tokensForUsers(members.map((m) => m.userId));
+  return tokensForUsers(members.map((m) => m.userId), category);
 }
 
+// Staff pushes (dispute rulings) aren't gated by a category — see PushCategory's
+// own doc comment — so this intentionally doesn't take one.
 async function tokensForVenueStaff(venueId: string): Promise<string[]> {
   const staff = await prisma.venueMembership.findMany({
     where: { venueId, role: { in: [Role.VENUE_STAFF, Role.VENUE_ADMIN, Role.VENUE_OWNER] } },
     select: { userId: true },
   });
-  return tokensForUsers(staff.map((m) => m.userId));
+  const devices = await prisma.device.findMany({
+    where: { userId: { in: staff.map((m) => m.userId) } },
+    select: { expoPushToken: true },
+  });
+  return devices.map((d) => d.expoPushToken);
 }
 
-async function tokensForUsers(userIds: readonly string[]): Promise<string[]> {
+async function tokensForUsers(userIds: readonly string[], category: PushCategory): Promise<string[]> {
   const unique = [...new Set(userIds)];
   if (unique.length === 0) return [];
   const devices = await prisma.device.findMany({
     where: { userId: { in: unique } },
-    select: { expoPushToken: true },
+    select: { expoPushToken: true, preferences: true },
   });
-  return devices.map((d) => d.expoPushToken);
+  // Explicit `false` opts out; anything else (absent key, absent row content)
+  // defaults to enabled — see Device.preferences's own doc comment on why
+  // "you're up" in particular must survive a "mute announcements" toggle,
+  // which is why this is opt-out per category rather than opt-in.
+  return devices
+    .filter((d) => (d.preferences as Record<string, unknown>)?.[category] !== false)
+    .map((d) => d.expoPushToken);
 }
 
 /**
@@ -81,10 +101,10 @@ export async function sendAdminMessagePush(
   body: string
 ): Promise<void> {
   const tokens = await (target.kind === "team"
-    ? tokensForTeams([target.teamId])
+    ? tokensForTeams([target.teamId], "news")
     : target.kind === "direct"
-      ? tokensForUsers([target.userId])
-      : tokensForTournamentPlayers(target.tournamentId));
+      ? tokensForUsers([target.userId], "news")
+      : tokensForTournamentPlayers(target.tournamentId, "news"));
 
   await sendPushToTokens(tokens, {
     title: "Message from the bar",
@@ -107,7 +127,7 @@ export async function sendMatchChatPush(
   senderName: string
 ): Promise<void> {
   const teamIds = [homeTeamId, awayTeamId].filter((t): t is string => t !== null);
-  const tokens = await tokensForTeams(teamIds);
+  const tokens = await tokensForTeams(teamIds, "match");
   await sendPushToTokens(tokens, {
     title: "New match message",
     body: `${senderName} sent a message.`,
@@ -122,7 +142,7 @@ export async function sendNotifyIntents(
   for (const intent of notify) {
     switch (intent.kind) {
       case "youre_up": {
-        const tokens = await tokensForTeams(intent.teams);
+        const tokens = await tokensForTeams(intent.teams, "match");
         await sendPushToTokens(tokens, {
           title: "You're up!",
           body: ctx.tableLabel ? `Head to ${ctx.tableLabel} now.` : "A table just opened up.",
@@ -131,7 +151,7 @@ export async function sendNotifyIntents(
         break;
       }
       case "confirm_result": {
-        const tokens = await tokensForTeams([intent.team]);
+        const tokens = await tokensForTeams([intent.team], "match");
         await sendPushToTokens(tokens, {
           title: "Confirm your result",
           body: "The other team reported a winner — take a look.",
@@ -140,7 +160,7 @@ export async function sendNotifyIntents(
         break;
       }
       case "result_settled": {
-        const tokens = await tokensForTeams(intent.teams);
+        const tokens = await tokensForTeams(intent.teams, "match");
         await sendPushToTokens(tokens, {
           title: "Match confirmed",
           body: "Your result is locked in.",
