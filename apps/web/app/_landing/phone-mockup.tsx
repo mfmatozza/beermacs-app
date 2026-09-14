@@ -28,8 +28,11 @@ export function PhoneMockup() {
               <b>7</b>
             </div>
           </div>
+          <div className={styles.previewChat}>
+            <span>Macs Attack</span>
+            <p>gg that was close 🍻</p>
+          </div>
           <div className={styles.previewRows}>
-            <i />
             <i />
             <i />
           </div>

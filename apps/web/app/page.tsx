@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DownloadCta } from "./_landing/download-cta";
+import { FeaturesGrid } from "./_landing/features-grid";
 import { Hero } from "./_landing/hero";
 import { HowItWorks } from "./_landing/how-it-works";
 import { LandingFooter } from "./_landing/landing-footer";
@@ -16,6 +17,7 @@ export default function HomePage() {
     <div className={styles.siteShell}>
       <Hero />
       <HowItWorks />
+      <FeaturesGrid />
       <DownloadCta />
       <LandingFooter />
     </div>

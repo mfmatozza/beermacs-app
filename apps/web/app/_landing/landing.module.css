@@ -23,7 +23,9 @@
 .siteShell {
   position: relative;
   overflow: clip;
-  background: var(--color-stout-900);
+  background:
+    radial-gradient(circle, rgb(255 240 206 / 0.05) 1.4px, transparent 1.4px) 0 0 / 26px 26px,
+    var(--color-stout-900);
 }
 
 /* ── Wordmark — the one Luckiest Guy moment ────────────────────────────── */
@@ -397,6 +399,27 @@
   color: var(--color-graffiti-green);
 }
 
+.previewChat {
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: rgb(60 176 67 / 0.1);
+  border: 1px solid rgb(60 176 67 / 0.2);
+}
+
+.previewChat span {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  color: var(--color-graffiti-green);
+}
+
+.previewChat p {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: rgb(255 240 206 / 0.75);
+}
+
 .previewRows {
   display: flex;
   flex-direction: column;
@@ -538,6 +561,91 @@
   .stepRow {
     flex-direction: column;
     gap: 1rem;
+  }
+}
+
+/* ── Features grid ────────────────────────────────────────────────────── */
+
+.featuresGrid {
+  position: relative;
+  padding: 3rem 1.5rem 6rem;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.featSquiggle {
+  position: absolute;
+  top: -1.5rem;
+  left: -3%;
+  width: 130px;
+  color: var(--color-graffiti-orange);
+  opacity: 0.7;
+  transform: scaleY(-1);
+}
+
+.featStar {
+  position: absolute;
+  bottom: 2rem;
+  right: 2%;
+  width: 44px;
+  color: var(--color-beer-500);
+  transform: rotate(-16deg);
+}
+
+.featTitle {
+  margin: 0.5rem 0 2.5rem;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4.5vw, 3.2rem);
+  line-height: 1.05;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.featGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.1rem;
+}
+
+.featCard {
+  position: relative;
+  padding: 1.6rem 1.5rem;
+  border-radius: 18px;
+  background: var(--color-stout-800);
+  border-top: 4px solid transparent;
+}
+
+.featGreen {
+  border-top-color: var(--color-graffiti-green);
+}
+
+.featYellow {
+  border-top-color: var(--color-beer-500);
+}
+
+.featOrange {
+  border-top-color: var(--color-graffiti-orange);
+}
+
+.featCard h3 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.featCard p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: rgb(255 240 206 / 0.65);
+}
+
+@media (max-width: 700px) {
+  .featGrid {
+    grid-template-columns: 1fr;
   }
 }
 
