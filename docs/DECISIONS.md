@@ -761,3 +761,55 @@ content ("APP SCREENSHOT PLACEHOLDER") — a real screenshot needs the actual
 shipped app, not a mockup rebuild. The web `/admin` panel (access control +
 landing content editing) is still the other open piece from this same
 round of feedback.
+
+---
+
+## D24 — Web `/admin` superadmin console: access control + editable landing copy
+
+Direct feedback, 2026-09-14: "the web /admin page where we can edit account
+accesses and all the content shown on the user frontend page... should
+resemble astra-app's" — pointed at `~/astra-app/apps/web/lib/{admin-auth,dashboard-access,authz}.ts`.
+
+**One platform admin, deliberately not a `User` row.** Mirrored astra's
+pattern: username + password (env, `scripts/create-admin.mjs` generates
+`ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD_HASH`, scrypt-hashed) plus an
+emailed 6-digit OTP as the second factor — reusing D17's Resend wrapper
+rather than a second email pipe. Its own signed, stateless session cookie
+(`lib/admin-session.ts`, HMAC'd with `BETTER_AUTH_SECRET`), not a Better
+Auth session — none of Beermacs' existing roles (PLAYER/VENUE_STAFF/
+VENUE_ADMIN/VENUE_OWNER, all venue-scoped via `VenueMembership`) should be
+able to grant access at OTHER venues or edit the marketing site, and this
+account isn't a `User` at all, so there's no role check that could
+accidentally cover it. 2FA is on in production, off locally by default
+(`admin2faEnabled()`), same as astra.
+
+**Access page**: create a venue (auto-slugged, since D15 means this is the
+only way one ever exists), look up any account by email, grant or revoke a
+venue role. This is exactly what every `.cjs` script run by hand this whole
+session was doing — D22's mobile admin console gave night-of staff real
+power; this gives the platform admin the one thing neither the mobile app
+nor any venue role should have: granting that power in the first place.
+
+**Content page**: three landing-page sections (hero, the three how-it-works
+steps, final CTA) are now DB-backed (`SiteContent`, one JSON row per key)
+instead of hardcoded strings, editable with no deploy. Deliberately NOT
+every string on the page — this covers the copy someone would actually want
+to iterate on without redeploying; layout, colors, and the graffiti marks
+stay code. `app/_landing/content-defaults.ts` is the single source both the
+admin form's defaults and the page's fallback (a fresh environment, or a
+key nobody's touched yet) read from, so they can't drift.
+
+**Verified against Neon, end to end**: logged in for real (2FA off, dev),
+hit every route directly (venues list, user search, a grant that correctly
+404s on an unknown email, a content write), confirmed the live landing page
+reflected an edited `landing.finalCta` on the next request with zero
+redeploy, then reverted the test edit. Screenshotted all four admin pages
+(login, dashboard, access, content) with a locally-installed `--no-save`
+playwright-core before calling this done, same as D23.
+
+**Not done in this pass**: rate-limiting on the admin login itself (single
+account, OTP already time-boxed to 10 minutes and single-use — acceptable
+for now, revisit if this account is ever targeted); per-page granular staff
+grants the way astra's `dashboardPages` lets a non-admin edit ONE section —
+Beermacs' admin is genuinely single-operator today, so that granularity
+isn't needed yet.

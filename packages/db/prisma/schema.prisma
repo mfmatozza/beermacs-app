@@ -741,3 +741,17 @@ model Device {
 
   @@index([userId])
 }
+
+// ─── Platform admin (superadmin console) ─────────────────────────────────────
+
+/// Editable copy for the marketing site (apps/web's landing page). Not
+/// user-generated content and not per-venue — a single global row per
+/// content key (e.g. "landing.hero"), read at request time by the page
+/// server components, written only from /admin/content. Nullable-by-key
+/// rather than one big JSON blob so a missing key just falls back to the
+/// page's own hardcoded default instead of the whole page 500ing.
+model SiteContent {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

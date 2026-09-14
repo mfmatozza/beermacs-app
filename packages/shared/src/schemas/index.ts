@@ -298,3 +298,42 @@ export const pushPreferencesInput = z.object({
   news: z.boolean().optional(),
 });
 export type PushPreferencesInput = z.infer<typeof pushPreferencesInput>;
+
+// ── Platform admin console ───────────────────────────────────────────────────
+
+export const adminLoginInput = z.object({
+  username: z.string().trim().min(1),
+  password: z.string().min(1),
+});
+export type AdminLoginInput = z.infer<typeof adminLoginInput>;
+
+export const adminVerifyOtpInput = z.object({
+  otp: z.string().trim().length(6),
+});
+export type AdminVerifyOtpInput = z.infer<typeof adminVerifyOtpInput>;
+
+/** Payload for POST /api/admin/venues — creating a venue by hand, the only
+ *  way one exists (docs/DECISIONS.md D15: no self-serve onboarding). */
+export const adminCreateVenueInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  city: z.string().trim().max(80).optional(),
+});
+export type AdminCreateVenueInput = z.infer<typeof adminCreateVenueInput>;
+
+/** Payload for POST /api/admin/access — grant a venue role by email, since
+ *  the admin has no reason to know a user's id. */
+export const adminGrantAccessInput = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  venueId: id,
+  role: z.enum(["PLAYER", "VENUE_STAFF", "VENUE_ADMIN", "VENUE_OWNER"]),
+});
+export type AdminGrantAccessInput = z.infer<typeof adminGrantAccessInput>;
+
+/** Payload for POST /api/admin/content/:key. The shape of `value` varies by
+ *  key (a hero has different fields than a step list) — validated by the
+ *  admin page that owns that key, not here; the server's job is just to
+ *  gate WHO can write, not WHAT the copy says. */
+export const adminSetContentInput = z.object({
+  value: z.unknown(),
+});
+export type AdminSetContentInput = z.infer<typeof adminSetContentInput>;

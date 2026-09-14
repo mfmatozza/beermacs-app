@@ -1,26 +1,8 @@
+import type { StepsContent } from "./content-defaults";
 import { DotGrid, SplatterStar, ZigZag } from "./graffiti-marks";
 import styles from "./landing.module.css";
 
-const STEPS = [
-  {
-    n: "01",
-    title: "Join",
-    body: "Scan the table code, form your team, and you're on the bracket.",
-    color: styles.stepGreen,
-  },
-  {
-    n: "02",
-    title: "Play",
-    body: "Get the push the second a table opens. No waiting around, no shouting over the bar.",
-    color: styles.stepYellow,
-  },
-  {
-    n: "03",
-    title: "Win",
-    body: "Report the score, your opponent confirms, the bracket updates itself.",
-    color: styles.stepOrange,
-  },
-] as const;
+const ACCENTS = [styles.stepGreen, styles.stepYellow, styles.stepOrange];
 
 /**
  * Replaces the old scroll-driven pong-ball physics section (usePongScroll)
@@ -30,7 +12,7 @@ const STEPS = [
  * static steps in the same graffiti language as the hero do the job with
  * nothing left to go wrong.
  */
-export function HowItWorks() {
+export function HowItWorks({ content }: { content: StepsContent }) {
   return (
     <section className={styles.howItWorks} aria-labelledby="how-title">
       <SplatterStar className={styles.howStar} />
@@ -39,19 +21,17 @@ export function HowItWorks() {
         <span /> HOW IT WORKS
       </p>
       <h2 id="how-title" className={styles.howTitle}>
-        Three taps to
-        <br />
-        the table.
+        {content.title}
       </h2>
       <div className={styles.stepRow}>
-        {STEPS.map((step, i) => (
-          <div key={step.n} className={styles.stepCardWrap}>
-            <div className={`${styles.stepCard} ${step.color}`}>
-              <span className={styles.stepNumber}>{step.n}</span>
+        {content.steps.map((step, i) => (
+          <div key={step.title} className={styles.stepCardWrap}>
+            <div className={`${styles.stepCard} ${ACCENTS[i % ACCENTS.length]}`}>
+              <span className={styles.stepNumber}>{String(i + 1).padStart(2, "0")}</span>
               <h3>{step.title}</h3>
               <p>{step.body}</p>
             </div>
-            {i < STEPS.length - 1 ? <ZigZag className={styles.stepZigZag} /> : null}
+            {i < content.steps.length - 1 ? <ZigZag className={styles.stepZigZag} /> : null}
           </div>
         ))}
       </div>

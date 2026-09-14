@@ -1,10 +1,11 @@
 import { AppStoreButton } from "./app-store-button";
+import type { HeroContent } from "./content-defaults";
 import { DotGrid, SpiralMark, SplatterStar, Squiggle } from "./graffiti-marks";
 import { PhoneMockup } from "./phone-mockup";
 import { Wordmark } from "./wordmark";
 import styles from "./landing.module.css";
 
-export function Hero() {
+export function Hero({ content }: { content: HeroContent }) {
   return (
     <header className={styles.hero}>
       <div className={styles.heroMarks} aria-hidden="true">
@@ -25,19 +26,17 @@ export function Hero() {
       <div className={styles.heroGrid} id="top">
         <div className={styles.heroCopy}>
           <p className={styles.eyebrow}>
-            <span /> PLAY. SCORE. REPEAT.
+            <span /> {content.eyebrow}
           </p>
           <h1>
             <Wordmark />
           </h1>
           <p className={styles.heroLine}>
-            Your tournament. <em>Your team.</em>
+            {content.headline} <em>{content.headlineEm}</em>
             <br />
             Every shot, live.
           </p>
-          <p className={styles.heroBody}>
-            Join the bracket, find your table and settle the score — without leaving the party.
-          </p>
+          <p className={styles.heroBody}>{content.body}</p>
           <div className={styles.heroActions}>
             <AppStoreButton />
             <span>Made for match night</span>
