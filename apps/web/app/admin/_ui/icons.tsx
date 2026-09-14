@@ -108,6 +108,24 @@ export function LogoutIcon(props: IconProps) {
   );
 }
 
+/** Hamburger — opens the mobile nav drawer. */
+export function MenuIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} aria-hidden="true">
+      <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+    </svg>
+  );
+}
+
+/** Closes the mobile nav drawer. */
+export function XIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
 /** Beer cups — a live/on-table match. */
 export function CupsIcon(props: IconProps) {
   return (

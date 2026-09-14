@@ -26,7 +26,7 @@ import type {
 } from "@beermacs/shared";
 import { authClient } from "./auth-client";
 import { API_URL } from "./config";
-import { TimeoutError, withTimeout } from "./with-timeout";
+import { withTimeout } from "./with-timeout";
 
 export class ApiError extends Error {
   constructor(
@@ -53,12 +53,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         },
       })
     );
-  } catch (e) {
-    // A dead network never rejects fetch() on its own on some hosts/proxies —
-    // this is what turns "spins forever" into an error a screen can show
-    // (every caller already handles a thrown ApiError; see e.g.
-    // use-join-tournament.ts's joinErrorMessage default branch).
-    throw new ApiError(0, e instanceof TimeoutError ? "network_timeout" : "network_error");
+  } catch {
+    // fetch() rejecting (no connection, DNS failure, etc.) is what turns
+    // into an error a screen can show, rather than an unhandled rejection —
+    // every caller already handles a thrown ApiError; see e.g.
+    // use-join-tournament.ts's joinErrorMessage default branch.
+    throw new ApiError(0, "network_error");
   }
 
   if (!res.ok) {
@@ -315,6 +315,10 @@ export const api = {
   endTournament: (tournamentId: string) =>
     request<{ id: string; status: string }>(`/api/tournaments/${tournamentId}/end`, {
       method: "POST",
+    }),
+  deleteTournament: (tournamentId: string) =>
+    request<{ id: string; deleted: boolean }>(`/api/tournaments/${tournamentId}`, {
+      method: "DELETE",
     }),
   board: (tournamentId: string) =>
     request<TournamentBoard>(`/api/tournaments/${tournamentId}/board`),

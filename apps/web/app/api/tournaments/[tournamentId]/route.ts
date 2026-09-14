@@ -9,7 +9,7 @@ import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
 import { MATCH_SELECT, toDomainMatch } from "@/lib/match-mapping";
-import { HttpError, requireVenueRole } from "@/lib/session";
+import { HttpError, requireVenueRoleOrAdmin } from "@/lib/session";
 import { FORMAT_TO_PRISMA, stagesFor } from "@/lib/tournament-format";
 
 export const runtime = "nodejs";
@@ -55,7 +55,7 @@ export async function GET(
     });
 
     if (!tournament) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    await requireVenueRole(tournament.venueId, Role.VENUE_STAFF);
+    await requireVenueRoleOrAdmin(tournament.venueId, Role.VENUE_STAFF);
 
     const tables = await prisma.venueTable.findMany({
       where: { venueId: tournament.venueId },
@@ -140,7 +140,7 @@ export async function PATCH(
       select: { venueId: true, format: true, config: true },
     });
     if (!tournament) throw new HttpError(404, "tournament_not_found");
-    await requireVenueRole(tournament.venueId, Role.VENUE_ADMIN);
+    await requireVenueRoleOrAdmin(tournament.venueId, Role.VENUE_ADMIN);
 
     const body = await parseBody(req, updateTournamentInput);
 
@@ -190,6 +190,35 @@ export async function PATCH(
     });
 
     return NextResponse.json({ id: tournamentId, format: body.format ?? tournament.format });
+  } catch (e) {
+    return handleError(e);
+  }
+}
+
+/**
+ * DELETE /api/tournaments/:tournamentId — hard delete, added for D26 (the
+ * web console needs to actually remove test/mistaken tournaments, not just
+ * end them). Cascades to every Stage/Round/Match/Team/ChatChannel/
+ * AuditEntry row underneath (all `onDelete: Cascade` in schema.prisma) —
+ * genuinely destructive and irreversible, unlike `end` (a status flag).
+ * VENUE_OWNER+, one tier above `end`'s VENUE_ADMIN — deleting history is a
+ * bigger call than closing a tournament out.
+ */
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ tournamentId: string }> }
+) {
+  try {
+    const { tournamentId } = await params;
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { venueId: true },
+    });
+    if (!tournament) throw new HttpError(404, "tournament_not_found");
+    await requireVenueRoleOrAdmin(tournament.venueId, Role.VENUE_OWNER);
+
+    await prisma.tournament.delete({ where: { id: tournamentId } });
+    return NextResponse.json({ id: tournamentId, deleted: true });
   } catch (e) {
     return handleError(e);
   }

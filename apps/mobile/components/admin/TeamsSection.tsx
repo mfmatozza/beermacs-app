@@ -89,6 +89,10 @@ export default function TeamsSection({
         <ActivityIndicator color={raw.beer} />
       ) : teamsQuery.isError ? (
         <Text className="font-sans text-[13px] text-dispute">Couldn&rsquo;t load the roster.</Text>
+      ) : teamsQuery.data.teams.length === 0 ? (
+        <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
+          No teams yet — add one above, or wait for players to join with the tournament code.
+        </Text>
       ) : (
         teamsQuery.data.teams.map((team) => (
           <View

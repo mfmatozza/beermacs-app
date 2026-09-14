@@ -67,41 +67,43 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">Player</th>
-                <th className="px-4 py-3 font-medium">Phone</th>
-                <th className="px-4 py-3 font-medium">Roles</th>
-                <th className="px-4 py-3 font-medium">Joined</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((u) => (
-                <tr key={u.id}>
-                  <td className="px-4 py-3">
-                    <span className="block font-medium text-gray-900">{u.displayName}</span>
-                    <span className="block text-xs text-gray-500">{u.email}</span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{u.phone || "—"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {u.memberships.length === 0 ? (
-                        <span className="text-xs text-gray-400">Player only</span>
-                      ) : (
-                        u.memberships.map((m) => (
-                          <Badge key={m.venue.id} tone={m.role === "PLAYER" ? "neutral" : "brand"}>
-                            {m.venue.name} · {m.role.replace("VENUE_", "")}
-                          </Badge>
-                        ))
-                      )}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-gray-500">{fmt.format(u.createdAt)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Player</th>
+                  <th className="px-4 py-3 font-medium">Phone</th>
+                  <th className="px-4 py-3 font-medium">Roles</th>
+                  <th className="px-4 py-3 font-medium">Joined</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((u) => (
+                  <tr key={u.id}>
+                    <td className="px-4 py-3">
+                      <span className="block font-medium text-gray-900">{u.displayName}</span>
+                      <span className="block text-xs text-gray-500">{u.email}</span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{u.phone || "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {u.memberships.length === 0 ? (
+                          <span className="text-xs text-gray-400">Player only</span>
+                        ) : (
+                          u.memberships.map((m) => (
+                            <Badge key={m.venue.id} tone={m.role === "PLAYER" ? "neutral" : "brand"}>
+                              {m.venue.name} · {m.role.replace("VENUE_", "")}
+                            </Badge>
+                          ))
+                        )}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-500">{fmt.format(u.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </>

@@ -6,7 +6,7 @@
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError } from "@/lib/http";
-import { HttpError, requireVenueRole } from "@/lib/session";
+import { HttpError, requireVenueRoleOrAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -22,7 +22,7 @@ export async function DELETE(
       select: { id: true, channel: { select: { tournament: { select: { venueId: true } } } } },
     });
     if (!message) throw new HttpError(404, "message_not_found");
-    await requireVenueRole(message.channel.tournament.venueId, Role.VENUE_STAFF);
+    await requireVenueRoleOrAdmin(message.channel.tournament.venueId, Role.VENUE_STAFF);
 
     await prisma.chatMessage.update({
       where: { id: messageId },

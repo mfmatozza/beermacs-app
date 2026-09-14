@@ -1,5 +1,6 @@
+import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { api, type TournamentDetail } from "../../lib/api";
 import { raw, TAB_BAR_HEIGHT } from "../../lib/theme";
 
@@ -34,6 +35,34 @@ export default function SettingsSection({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = () => {
+    Alert.alert(
+      `Delete ${detail.name}?`,
+      "This permanently removes the tournament and everything in it — teams, matches, chat. This is not the same as ending it, and cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete forever",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setDeleting(true);
+              setError(null);
+              try {
+                await api.deleteTournament(detail.id);
+                router.replace("/admin");
+              } catch {
+                setError("Couldn't delete this tournament — you may need to be the venue owner.");
+                setDeleting(false);
+              }
+            })();
+          },
+        },
+      ]
+    );
+  };
 
   const save = async () => {
     setSaving(true);
@@ -134,6 +163,29 @@ export default function SettingsSection({
           <Text className="font-display text-lg uppercase tracking-[0.6px] text-stout-900">Save</Text>
         )}
       </Pressable>
+
+      <View className="mt-4 gap-2 rounded-2xl border border-dispute/40 bg-dispute/5 p-4">
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-dispute">
+          Danger zone
+        </Text>
+        <Pressable
+          onPress={confirmDelete}
+          disabled={deleting}
+          accessibilityRole="button"
+          accessibilityLabel="Delete tournament"
+          className={`min-h-[44px] items-center justify-center rounded-lg border border-dispute active:opacity-70 ${
+            deleting ? "opacity-50" : ""
+          }`}
+        >
+          {deleting ? (
+            <ActivityIndicator size="small" color={raw.dispute} />
+          ) : (
+            <Text className="font-display text-base uppercase tracking-[0.6px] text-dispute">
+              Delete tournament
+            </Text>
+          )}
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }

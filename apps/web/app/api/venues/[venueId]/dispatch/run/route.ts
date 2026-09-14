@@ -12,14 +12,14 @@ import { Role } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError } from "@/lib/http";
 import { runDispatchPass } from "@/lib/dispatch";
-import { requireVenueRole } from "@/lib/session";
+import { requireVenueRoleOrAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ venueId: string }> }) {
   try {
     const { venueId } = await params;
-    await requireVenueRole(venueId, Role.VENUE_STAFF);
+    await requireVenueRoleOrAdmin(venueId, Role.VENUE_STAFF);
 
     const summary = await runDispatchPass(venueId);
     return NextResponse.json(summary);

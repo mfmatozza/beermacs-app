@@ -9,7 +9,7 @@ import { createTeamInput } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
-import { HttpError, requireVenueRole, requireViewer } from "@/lib/session";
+import { HttpError, requireVenueRoleOrAdmin, requireViewer } from "@/lib/session";
 import { createTeamInTournament } from "@/lib/teams";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ export async function GET(
       select: { venueId: true },
     });
     if (!tournament) throw new HttpError(404, "tournament_not_found");
-    await requireVenueRole(tournament.venueId, Role.VENUE_STAFF);
+    await requireVenueRoleOrAdmin(tournament.venueId, Role.VENUE_STAFF);
 
     const teams = await prisma.team.findMany({
       where: { tournamentId },

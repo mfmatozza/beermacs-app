@@ -76,39 +76,41 @@ export default async function TournamentsPage({
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">Tournament</th>
-                <th className="px-4 py-3 font-medium">Venue</th>
-                <th className="px-4 py-3 font-medium">Format</th>
-                <th className="px-4 py-3 font-medium">Teams</th>
-                <th className="px-4 py-3 font-medium">Matches</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Created</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {tournaments.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <Link href={`/admin/tournaments/${t.id}`} className="font-medium text-gray-900 hover:text-beer-700">
-                      {t.name}
-                    </Link>
-                    <span className="block text-xs text-gray-400">{t.joinCode}</span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{t.venue.name}</td>
-                  <td className="px-4 py-3 text-gray-600">{t.format.replace(/_/g, " ").toLowerCase()}</td>
-                  <td className="px-4 py-3 text-gray-600">{t._count.teams}</td>
-                  <td className="px-4 py-3 text-gray-600">{t._count.matches}</td>
-                  <td className="px-4 py-3">
-                    <Badge tone={STATUS_TONE[t.status]}>{t.status}</Badge>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-gray-500">{fmt.format(t.createdAt)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Tournament</th>
+                  <th className="px-4 py-3 font-medium">Venue</th>
+                  <th className="px-4 py-3 font-medium">Format</th>
+                  <th className="px-4 py-3 font-medium">Teams</th>
+                  <th className="px-4 py-3 font-medium">Matches</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Created</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {tournaments.map((t) => (
+                  <tr key={t.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <Link href={`/admin/tournaments/${t.id}`} className="font-medium text-gray-900 hover:text-beer-700">
+                        {t.name}
+                      </Link>
+                      <span className="block text-xs text-gray-400">{t.joinCode}</span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{t.venue.name}</td>
+                    <td className="px-4 py-3 text-gray-600">{t.format.replace(/_/g, " ").toLowerCase()}</td>
+                    <td className="px-4 py-3 text-gray-600">{t._count.teams}</td>
+                    <td className="px-4 py-3 text-gray-600">{t._count.matches}</td>
+                    <td className="px-4 py-3">
+                      <Badge tone={STATUS_TONE[t.status]}>{t.status}</Badge>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-500">{fmt.format(t.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </>

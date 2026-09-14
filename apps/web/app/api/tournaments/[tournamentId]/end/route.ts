@@ -13,13 +13,24 @@
 //   - Preserve in history: a status flag, not a delete — nothing here
 //     removes a row.
 //
+// One thing this DID need to do explicitly, found from a real bug report
+// (D26): release every table this tournament left BUSY. Nothing else ever
+// clears venueTableId/table state on tournament end — a match settling
+// normally does (see resolve/assign-table), but a tournament ended with
+// live matches still on tables (the actual night simply stopped, or — every
+// time this session tested "end tournament" — a test tournament abandoned
+// mid-match) left those tables permanently BUSY, with no path back to OPEN
+// short of a database script. Tables are VENUE property, not tournament
+// property, so leaving them stuck blocks every FUTURE tournament at that
+// venue too, not just this one.
+//
 // VENUE_ADMIN+ (ending a tournament is a setup-level call, same tier as
 // creating one, not a night-of VENUE_STAFF action).
 
 import { prisma, Role } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError } from "@/lib/http";
-import { HttpError, requireVenueRole } from "@/lib/session";
+import { HttpError, requireVenueRoleOrAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -35,16 +46,26 @@ export async function POST(
       select: { venueId: true, status: true, endedAt: true },
     });
     if (!tournament) throw new HttpError(404, "tournament_not_found");
-    await requireVenueRole(tournament.venueId, Role.VENUE_ADMIN);
+    await requireVenueRoleOrAdmin(tournament.venueId, Role.VENUE_ADMIN);
 
     // Idempotent, same as openRound: ending an already-ended tournament is
     // a no-op, not an error — a staff phone retrying a flaky request should
     // never see a failure for repeating something that already happened.
     if (tournament.status !== "COMPLETE") {
-      await prisma.tournament.update({
-        where: { id: tournamentId },
-        data: { status: "COMPLETE", endedAt: new Date() },
+      const stuckTableIds = await prisma.match.findMany({
+        where: { tournamentId, venueTableId: { not: null } },
+        select: { venueTableId: true },
       });
+      await prisma.$transaction([
+        prisma.tournament.update({
+          where: { id: tournamentId },
+          data: { status: "COMPLETE", endedAt: new Date() },
+        }),
+        prisma.venueTable.updateMany({
+          where: { id: { in: stuckTableIds.map((m) => m.venueTableId!) } },
+          data: { state: "OPEN" },
+        }),
+      ]);
     }
 
     return NextResponse.json({ id: tournamentId, status: "COMPLETE" });

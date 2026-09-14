@@ -11,7 +11,7 @@ import { withdrawTeamInput } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
-import { HttpError, requireVenueRole } from "@/lib/session";
+import { HttpError, requireVenueRoleOrAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ teamId:
       select: { id: true, tournamentId: true, tournament: { select: { venueId: true } } },
     });
     if (!team) throw new HttpError(404, "team_not_found");
-    const viewer = await requireVenueRole(team.tournament.venueId, Role.VENUE_STAFF);
+    const viewer = await requireVenueRoleOrAdmin(team.tournament.venueId, Role.VENUE_STAFF);
 
     await prisma.$transaction([
       prisma.team.update({ where: { id: teamId }, data: { withdrawn: true } }),

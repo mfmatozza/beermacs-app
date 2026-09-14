@@ -48,8 +48,8 @@ const SECTIONS = [
 
 export default async function AdminHomePage() {
   const [venues, users, tournaments, runningNow, matchesToday] = await Promise.all([
-    prisma.venue.count(),
-    prisma.user.count(),
+    prisma.venue.count({ where: { deletedAt: null } }),
+    prisma.user.count({ where: { deletedAt: null } }),
     prisma.tournament.count(),
     prisma.tournament.count({ where: { status: "RUNNING" } }),
     prisma.match.count({

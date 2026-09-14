@@ -17,7 +17,7 @@ import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
 import { sendAdminMessagePush } from "@/lib/notify";
-import { HttpError, requireVenueRole } from "@/lib/session";
+import { HttpError, requireVenueRoleOrAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -33,7 +33,7 @@ export async function POST(
       select: { venueId: true },
     });
     if (!tournament) throw new HttpError(404, "tournament_not_found");
-    const viewer = await requireVenueRole(tournament.venueId, Role.VENUE_STAFF);
+    const viewer = await requireVenueRoleOrAdmin(tournament.venueId, Role.VENUE_STAFF);
 
     const body = await parseBody(req, sendAdminMessageInput);
 

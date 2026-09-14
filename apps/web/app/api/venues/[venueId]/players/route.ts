@@ -9,14 +9,14 @@
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError } from "@/lib/http";
-import { requireVenueRole } from "@/lib/session";
+import { requireVenueRoleOrAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ venueId: string }> }) {
   try {
     const { venueId } = await params;
-    await requireVenueRole(venueId, Role.VENUE_ADMIN);
+    await requireVenueRoleOrAdmin(venueId, Role.VENUE_ADMIN);
 
     const memberships = await prisma.venueMembership.findMany({
       where: { venueId },

@@ -15,7 +15,7 @@ import { Role, TableState, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError } from "@/lib/http";
 import { MATCH_SELECT, toDomainMatch } from "@/lib/match-mapping";
-import { requireVenueRole } from "@/lib/session";
+import { requireVenueRoleOrAdmin } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -34,7 +34,7 @@ const toTable = (t: {
 export async function GET(_req: Request, { params }: { params: Promise<{ venueId: string }> }) {
   try {
     const { venueId } = await params;
-    await requireVenueRole(venueId, Role.VENUE_STAFF);
+    await requireVenueRoleOrAdmin(venueId, Role.VENUE_STAFF);
 
     const [rows, tableRows] = await Promise.all([
       // Priority order is this function's job now, not buildQueue's (Match no

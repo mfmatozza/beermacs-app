@@ -866,3 +866,86 @@ in both Players and Access), before calling this done.
 earlier `eas-cli` invocation run from the repo root (instead of
 `apps/mobile`) had scaffolded there — tooling debris, not part of this
 work, deleted rather than committed.
+
+## D26 — Web admin becomes a real backoffice (full CRUD), mobile admin bugs fixed, both made phone-usable
+
+D25 read: "the web admin is a monitor, not a backoffice" and built every
+tournament/venue detail page read-only on purpose — every mutating action
+stayed exclusive to the mobile admin console. That was wrong: the actual
+ask ("from the website I need to be able to edit everything, delete stuff,
+modify it, everything") predates D25 and D25 didn't honor it. Fixed here.
+
+**The web admin needed to write, but has no session of its own to write
+with** — every mutating route (`requireVenueRole`, `requireVenueRoleForRound/
+Stage/Match`) demands a real `Membership` row tied to a Better Auth user
+session, and the platform admin is neither a venue member nor a Better
+Auth session — just a signed cookie (D24). Rather than build a second,
+parallel set of `/api/admin/*` mutation endpoints (a duplicate of every
+business rule the mobile admin already calls), gave the admin a real
+backing `User` row (`upsertAdminUser()`, upserted lazily by `ADMIN_EMAIL`
+on first write) and a bypass — `requireVenueRoleOrAdmin` / `requireViewerOrAdmin`
+in `lib/session.ts` — wired into the three shared round/stage/match role
+checks so the ~13 leaf routes that called `requireVenueRole` directly only
+needed a one-line swap to also accept the admin cookie. `lib/admin-cookie.ts`
+holds the pure cookie primitives now (split out of `admin-session.ts`) so
+`session.ts` can check `isAdminSession()` without a circular import.
+
+**New CRUD surface, reusing the mobile admin's own routes wherever they
+already existed**: tournament settings (players/team, cups to win, confirm
+timeout, chat toggle, repêchage mode), round open + pause/resume
+auto-dispatch, dispute settle, team add/rename/withdraw/delete, tournament
+end/delete, venue edit/soft-delete, and — new on both platforms — table
+add/rename/close/force-release/remove (`apps/web/app/api/venues/[venueId]/
+tables`, `apps/web/app/api/tables/[tableId]{,/state}`). Verified against
+real data end-to-end: logged in as the platform admin via curl, created a
+tournament + 2 teams through the exact mobile-admin route, then drove the
+web UI with Playwright to open a round, confirm the settings form, and
+exercise the venue table controls — not just a typecheck pass.
+
+**Mobile admin bugs reported directly** (`i cannot delete old tournaments
+i cannot close tables ... nothiong loads`), fixed:
+- **No delete-tournament path** — added `DELETE /api/tournaments/:id` and
+  a "Danger zone" section in `SettingsSection.tsx`.
+- **Tables stuck `BUSY` forever** — traced to `POST /api/tournaments/:id/end`
+  never releasing the tables its matches held; it now does, in the same
+  transaction that marks the tournament `COMPLETE`. Also added a "force
+  release" path (`state` input gained `force: boolean`) for tables that end
+  up stuck with no real match on them for any other reason — a genuine gap,
+  not just a one-time cleanup, so it's now a permanent safety valve on both
+  mobile (`TablesSection.tsx`) and web (`TableTile`).
+- **"Remove timeout"** — the client-side request timeout added earlier this
+  cycle (a defensive measure, not something asked for) was confusing in
+  practice with no way to tell a slow network from a hang; `with-timeout.ts`
+  is now a passthrough, `network_timeout` removed from the error-message
+  paths.
+- **Empty states** — Teams/Tables sections now say something
+  (`"No teams yet — ..."` / `"No tables at this venue yet — ..."`) instead
+  of silently rendering nothing, which read as broken.
+
+**Found while wiring the web "Open round" button**: `StageCard`'s
+`nextRoundIndex` was computed as *last existing round's index + 1* — wrong,
+because round 1's row already exists (created `NOT_OPENED` at tournament
+creation, per E-7) before anyone opens it. On a tournament that had never
+opened round 1, the button read "Open round 2", and clicking it created and
+opened a phantom round 2 while round 1 sat unopened forever — caught by
+querying the DB directly after clicking, not by trusting the screenshot.
+Fixed two ways: each `RoundRow` now gets its own "Open" action when it
+isn't `OPEN` yet (matching the mobile admin's `RoundCard`, which already
+did this correctly), and the bottom "Open round N" button only appears
+once every existing round is `OPEN` — it now only ever creates a genuinely
+new round, never guesses which existing one is "next".
+
+**Made both consoles' backoffice actually usable on a phone** — the ask
+was explicit: the web admin is meant to be the "great access" replacement
+for the mobile app's own broken admin section, so it has to hold up on a
+phone browser too, not just desktop. `apps/web/app/admin/(dashboard)/
+layout.tsx`'s fixed 240px sidebar (unconditionally rendered, no responsive
+handling — the same pattern `astra-app`'s own dashboard layout uses, so
+there was no existing reference to copy) is now `AdminShell`
+(`app/admin/_ui/admin-shell.tsx`): the sidebar only renders `md:flex`, and
+under that a sticky top bar with a hamburger opens a slide-in drawer
+carrying the same nav, closing on link tap, backdrop tap, or route change.
+Also added `overflow-x-auto` wrappers around every admin list table
+(tournaments/venues/players — the 7-column tournaments table was the worst
+offender) since `overflow-hidden` alone was clipping columns instead of
+letting them scroll on a narrow screen.

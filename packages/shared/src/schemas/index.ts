@@ -135,6 +135,13 @@ export type AssignTableInput = z.infer<typeof assignTableInput>;
 /** Payload for POST /api/tables/:id/state — pull a wobbly table out of rotation. */
 export const setTableStateInput = z.object({
   state: z.enum(["open", "closed"]),
+  /** Bypass the "refuses to touch a BUSY table" safety check (D26) — for
+   *  the real, recurring case of a table stuck BUSY with no live match
+   *  actually on it (an abandoned tournament, a bug elsewhere that forgot
+   *  to release it on settle). Also clears venueTableId off any match that
+   *  still points at this table, so the override can't leave a match
+   *  thinking it's on a table that now reads OPEN. */
+  force: z.boolean().optional(),
 });
 export type SetTableStateInput = z.infer<typeof setTableStateInput>;
 
@@ -337,3 +344,31 @@ export const adminSetContentInput = z.object({
   value: z.unknown(),
 });
 export type AdminSetContentInput = z.infer<typeof adminSetContentInput>;
+
+// ── Full CRUD from the web console (D26) ─────────────────────────────────────
+
+/** Payload for PATCH /api/venues/:id. */
+export const updateVenueInput = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  city: z.string().trim().max(80).nullable().optional(),
+});
+export type UpdateVenueInput = z.infer<typeof updateVenueInput>;
+
+/** Payload for PATCH /api/teams/:id — renaming, distinct from withdraw
+ *  (soft-flag) and DELETE (hard remove). */
+export const updateTeamInput = z.object({
+  name: z.string().trim().min(1).max(40),
+});
+export type UpdateTeamInput = z.infer<typeof updateTeamInput>;
+
+/** Payload for POST /api/venues/:id/tables — add one physical table. */
+export const createTableInput = z.object({
+  label: z.string().trim().min(1).max(24),
+});
+export type CreateTableInput = z.infer<typeof createTableInput>;
+
+/** Payload for PATCH /api/tables/:id — relabel one. */
+export const updateTableInput = z.object({
+  label: z.string().trim().min(1).max(24),
+});
+export type UpdateTableInput = z.infer<typeof updateTableInput>;

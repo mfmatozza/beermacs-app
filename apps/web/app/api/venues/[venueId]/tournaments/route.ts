@@ -18,7 +18,7 @@ import { createTournamentInput, generateJoinCode } from "@beermacs/shared";
 import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
-import { requireVenueRole } from "@/lib/session";
+import { requireVenueRoleOrAdmin } from "@/lib/session";
 import { FORMAT_TO_PRISMA, stagesFor } from "@/lib/tournament-format";
 
 export const runtime = "nodejs";
@@ -40,7 +40,7 @@ async function uniqueJoinCode(): Promise<string> {
 export async function GET(_req: Request, { params }: { params: Promise<{ venueId: string }> }) {
   try {
     const { venueId } = await params;
-    await requireVenueRole(venueId, Role.VENUE_STAFF);
+    await requireVenueRoleOrAdmin(venueId, Role.VENUE_STAFF);
 
     const tournaments = await prisma.tournament.findMany({
       where: { venueId },
@@ -57,7 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ venueId
 export async function POST(req: Request, { params }: { params: Promise<{ venueId: string }> }) {
   try {
     const { venueId } = await params;
-    await requireVenueRole(venueId, Role.VENUE_ADMIN);
+    await requireVenueRoleOrAdmin(venueId, Role.VENUE_ADMIN);
     const body = await parseBody(req, createTournamentInput);
 
     const joinCode = await uniqueJoinCode();

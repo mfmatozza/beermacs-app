@@ -7,6 +7,8 @@
 
 import { Role, prisma } from "@beermacs/db";
 import { headers } from "next/headers";
+import { isAdminSession } from "./admin-cookie";
+import { upsertAdminUser } from "./admin-auth";
 import { getAuth } from "./auth";
 
 export interface Viewer {
@@ -132,6 +134,40 @@ export async function requireVenueRole(venueId: string, atLeast: Role): Promise<
 }
 
 /**
+ * The platform admin (lib/admin-cookie.ts's cookie, NOT a Better Auth
+ * session) as a Viewer, shaped from its own real `User` row
+ * (lib/admin-auth.ts's `upsertAdminUser` — every mutating route attributes
+ * its action to a userId, and this is what makes that FK-safe for the one
+ * account that isn't a normal signed-up user).
+ */
+async function adminViewer(): Promise<Viewer> {
+  const u = await upsertAdminUser();
+  return { userId: u.id, displayName: u.displayName, email: u.email, phone: "", image: null };
+}
+
+/**
+ * Like requireViewer(), but the platform admin's cookie satisfies it too
+ * (D26: the web admin console needs to reuse the exact same mutating routes
+ * the mobile admin console calls — see docs/DECISIONS.md — rather than a
+ * parallel set of admin-only routes reimplementing the same writes).
+ */
+export async function requireViewerOrAdmin(): Promise<Viewer> {
+  if (await isAdminSession()) return adminViewer();
+  return requireViewer();
+}
+
+/**
+ * Like requireVenueRole(), but the platform admin bypasses the role check
+ * entirely rather than needing a real VenueMembership at every venue — the
+ * admin is a different, higher tier the per-venue role hierarchy doesn't
+ * model, not "staff everywhere." See adminViewer()'s own comment.
+ */
+export async function requireVenueRoleOrAdmin(venueId: string, atLeast: Role): Promise<Viewer> {
+  if (await isAdminSession()) return adminViewer();
+  return requireVenueRole(venueId, atLeast);
+}
+
+/**
  * Round/match-scoped routes only have a roundId or matchId in the URL, not a
  * venueId — this resolves the venue by walking the relation (Round → Stage →
  * Tournament) and then applies the usual role check. Throws 404 rather than
@@ -143,7 +179,7 @@ export async function requireVenueRoleForRound(roundId: string, atLeast: Role): 
     select: { stage: { select: { tournament: { select: { venueId: true } } } } },
   });
   if (!round) throw new HttpError(404, "round_not_found");
-  return requireVenueRole(round.stage.tournament.venueId, atLeast);
+  return requireVenueRoleOrAdmin(round.stage.tournament.venueId, atLeast);
 }
 
 /** Same idea, resolved from a stageId (Stage → Tournament, direct FK). Needed
@@ -154,7 +190,7 @@ export async function requireVenueRoleForStage(stageId: string, atLeast: Role): 
     select: { tournament: { select: { venueId: true } } },
   });
   if (!stage) throw new HttpError(404, "stage_not_found");
-  return requireVenueRole(stage.tournament.venueId, atLeast);
+  return requireVenueRoleOrAdmin(stage.tournament.venueId, atLeast);
 }
 
 /** Same idea, resolved from a matchId (Match → Tournament, direct FK). */
@@ -164,5 +200,5 @@ export async function requireVenueRoleForMatch(matchId: string, atLeast: Role): 
     select: { tournament: { select: { venueId: true } } },
   });
   if (!match) throw new HttpError(404, "match_not_found");
-  return requireVenueRole(match.tournament.venueId, atLeast);
+  return requireVenueRoleOrAdmin(match.tournament.venueId, atLeast);
 }
