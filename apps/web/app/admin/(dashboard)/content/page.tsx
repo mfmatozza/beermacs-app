@@ -9,6 +9,10 @@ import {
   type HeroContent,
   type StepsContent,
 } from "../../../_landing/content-defaults";
+import { Button } from "../../_ui/button";
+import { Card } from "../../_ui/card";
+import { Field, Input, Textarea } from "../../_ui/field";
+import { PageHeader } from "../../_ui/page-header";
 
 export default function ContentPage() {
   const [loaded, setLoaded] = useState(false);
@@ -39,131 +43,95 @@ export default function ContentPage() {
     setSavedKey(key);
   };
 
-  if (!loaded) return <p className="text-beer-100/60">Loading…</p>;
+  if (!loaded) return <p className="text-gray-500">Loading…</p>;
 
   return (
-    <div className="flex max-w-2xl flex-col gap-10">
-      <h1 className="font-display text-3xl uppercase tracking-wide text-white">Site content</h1>
-      <p className="-mt-6 text-sm text-beer-100/50">
-        Edits go live on the landing page immediately — no deploy needed.
-      </p>
+    <div className="max-w-2xl">
+      <PageHeader title="Site content" subtitle="Edits go live on the landing page immediately — no deploy needed." />
 
-      <section className="flex flex-col gap-3 rounded-xl border border-white/10 bg-stout-800 p-5">
-        <h2 className="font-display text-xl uppercase text-beer-500">Hero</h2>
-        <Field label="Eyebrow" value={hero.eyebrow} onChange={(v) => setHero({ ...hero, eyebrow: v })} />
-        <Field
-          label="Headline"
-          value={hero.headline}
-          onChange={(v) => setHero({ ...hero, headline: v })}
-        />
-        <Field
-          label="Headline (emphasized part)"
-          value={hero.headlineEm}
-          onChange={(v) => setHero({ ...hero, headlineEm: v })}
-        />
-        <Field label="Body" value={hero.body} onChange={(v) => setHero({ ...hero, body: v })} multiline />
-        <SaveButton onClick={() => void save("landing.hero", hero)} saved={savedKey === "landing.hero"} />
-      </section>
-
-      <section className="flex flex-col gap-3 rounded-xl border border-white/10 bg-stout-800 p-5">
-        <h2 className="font-display text-xl uppercase text-beer-500">How it works</h2>
-        <Field
-          label="Section title"
-          value={steps.title}
-          onChange={(v) => setSteps({ ...steps, title: v })}
-        />
-        {steps.steps.map((s, i) => (
-          <div key={i} className="rounded-lg border border-white/10 p-3">
-            <p className="mb-2 text-xs uppercase tracking-wide text-beer-100/50">
-              Step {i + 1}
-            </p>
-            <Field
-              label="Title"
-              value={s.title}
-              onChange={(v) => {
-                const next = [...steps.steps];
-                next[i] = { ...next[i]!, title: v };
-                setSteps({ ...steps, steps: next });
-              }}
-            />
-            <Field
-              label="Body"
-              value={s.body}
-              onChange={(v) => {
-                const next = [...steps.steps];
-                next[i] = { ...next[i]!, body: v };
-                setSteps({ ...steps, steps: next });
-              }}
-              multiline
-            />
+      <div className="flex flex-col gap-6">
+        <Card>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-beer-700">Hero</h2>
+          <div className="flex flex-col gap-4">
+            <Field label="Eyebrow">
+              <Input value={hero.eyebrow} onChange={(e) => setHero({ ...hero, eyebrow: e.target.value })} />
+            </Field>
+            <Field label="Headline">
+              <Input value={hero.headline} onChange={(e) => setHero({ ...hero, headline: e.target.value })} />
+            </Field>
+            <Field label="Headline (emphasized part)">
+              <Input value={hero.headlineEm} onChange={(e) => setHero({ ...hero, headlineEm: e.target.value })} />
+            </Field>
+            <Field label="Body">
+              <Textarea value={hero.body} onChange={(e) => setHero({ ...hero, body: e.target.value })} rows={2} />
+            </Field>
+            <SaveRow onClick={() => void save("landing.hero", hero)} saved={savedKey === "landing.hero"} />
           </div>
-        ))}
-        <SaveButton onClick={() => void save("landing.steps", steps)} saved={savedKey === "landing.steps"} />
-      </section>
+        </Card>
 
-      <section className="flex flex-col gap-3 rounded-xl border border-white/10 bg-stout-800 p-5">
-        <h2 className="font-display text-xl uppercase text-beer-500">Final call to action</h2>
-        <Field
-          label="Eyebrow"
-          value={finalCta.eyebrow}
-          onChange={(v) => setFinalCta({ ...finalCta, eyebrow: v })}
-        />
-        <Field
-          label="Headline"
-          value={finalCta.headline}
-          onChange={(v) => setFinalCta({ ...finalCta, headline: v })}
-        />
-        <SaveButton
-          onClick={() => void save("landing.finalCta", finalCta)}
-          saved={savedKey === "landing.finalCta"}
-        />
-      </section>
+        <Card>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-beer-700">How it works</h2>
+          <div className="flex flex-col gap-4">
+            <Field label="Section title">
+              <Input value={steps.title} onChange={(e) => setSteps({ ...steps, title: e.target.value })} />
+            </Field>
+            {steps.steps.map((s, i) => (
+              <div key={i} className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Step {i + 1}</p>
+                <Field label="Title">
+                  <Input
+                    value={s.title}
+                    onChange={(e) => {
+                      const next = [...steps.steps];
+                      next[i] = { ...next[i]!, title: e.target.value };
+                      setSteps({ ...steps, steps: next });
+                    }}
+                  />
+                </Field>
+                <Field label="Body">
+                  <Textarea
+                    rows={2}
+                    value={s.body}
+                    onChange={(e) => {
+                      const next = [...steps.steps];
+                      next[i] = { ...next[i]!, body: e.target.value };
+                      setSteps({ ...steps, steps: next });
+                    }}
+                  />
+                </Field>
+              </div>
+            ))}
+            <SaveRow onClick={() => void save("landing.steps", steps)} saved={savedKey === "landing.steps"} />
+          </div>
+        </Card>
+
+        <Card>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-beer-700">Final call to action</h2>
+          <div className="flex flex-col gap-4">
+            <Field label="Eyebrow">
+              <Input value={finalCta.eyebrow} onChange={(e) => setFinalCta({ ...finalCta, eyebrow: e.target.value })} />
+            </Field>
+            <Field label="Headline">
+              <Input
+                value={finalCta.headline}
+                onChange={(e) => setFinalCta({ ...finalCta, headline: e.target.value })}
+              />
+            </Field>
+            <SaveRow onClick={() => void save("landing.finalCta", finalCta)} saved={savedKey === "landing.finalCta"} />
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  multiline,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  multiline?: boolean;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-xs uppercase tracking-wide text-beer-100/50">{label}</span>
-      {multiline ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={2}
-          className="rounded-lg border border-white/15 bg-stout-900 px-3 py-2 text-beer-100 outline-none focus:border-beer-500"
-        />
-      ) : (
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="rounded-lg border border-white/15 bg-stout-900 px-3 py-2 text-beer-100 outline-none focus:border-beer-500"
-        />
-      )}
-    </label>
-  );
-}
-
-function SaveButton({ onClick, saved }: { onClick: () => void; saved: boolean }) {
+function SaveRow({ onClick, saved }: { onClick: () => void; saved: boolean }) {
   return (
     <div className="flex items-center gap-3">
-      <button
-        onClick={onClick}
-        className="self-start rounded-lg bg-beer-500 px-4 py-2 text-sm font-semibold text-stout-900"
-      >
+      <Button type="button" onClick={onClick}>
         Save
-      </button>
-      {saved ? <span className="text-sm text-live">Saved.</span> : null}
+      </Button>
+      {saved ? <span className="text-sm text-green-600">Saved.</span> : null}
     </div>
   );
 }

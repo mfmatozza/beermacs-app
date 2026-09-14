@@ -813,3 +813,56 @@ for now, revisit if this account is ever targeted); per-page granular staff
 grants the way astra's `dashboardPages` lets a non-admin edit ONE section —
 Beermacs' admin is genuinely single-operator today, so that granularity
 isn't needed yet.
+
+---
+
+## D25 — Admin console rebuilt: real component kit, light theme, and it actually monitors the mobile app now
+
+Direct, sharp feedback, 2026-09-14: D24's admin was "shit" on two counts —
+scope (it was mostly a website-content editor; "it is meant to monitor and
+edit the mobile app... it is all linked to the mobile app okay?") and
+UI/UX ("look at astra-app and see how nice that is").
+
+**Went and actually read astra's dashboard**, not just its auth logic
+(already referenced in D24): `~/astra-app/apps/web/app/_ui/*` (Card,
+StatCard, Badge, Button, Field/Input/Textarea/Select/Toggle, PageHeader,
+EmptyState) and `dashboard/{page,layout}.tsx`, `team/team-manager.tsx`,
+`users/page.tsx` for the actual table/list/expandable-card patterns. Built
+the equivalent kit at `apps/web/app/admin/_ui/`, Beermacs-brand-toned
+(beer-500 gold in place of astra's blue), and switched the whole console to
+**light** — deliberately the opposite of the marketing site's dark
+poster commitment (D23): an operator console gets scanned for long
+stretches, not sold to, same reasoning astra's own dashboard already
+demonstrates.
+
+**Scope actually expanded to monitoring, not just access+content**:
+- **Tournaments** (new): every tournament across every venue, filterable by
+  status, linking to a **read-only** detail page — stat cards, the full
+  bracket (stage → round → match, with table assignment and state), the
+  team roster. Deliberately read-only: every action that changes a
+  tournament's state already lives in the mobile admin (D22, the actual
+  "gods" console) — duplicating force-result/round-open here would be a
+  second code path with no real benefit, since the platform admin isn't who
+  runs match night.
+- **Venues** (new list+detail, replacing the venue table that used to live
+  inline on Access): create a venue, see its tournaments and staff at a
+  glance, drill into either.
+- **Players** (new): every account on the platform, searchable — the
+  cross-venue view Access's per-lookup flow didn't give.
+- **Access**: same grant/revoke capability as D24, restyled with the new
+  kit (avatar-initial header, badge-tagged current-access rows, inline
+  grant form) instead of raw `<select>`/`<table>` HTML.
+- **Site content**: kept, restyled, deliberately de-emphasized in the nav
+  order (last) — it's real, but it's not what this console is FOR.
+
+**Verified visually again**: logged in for real, screenshotted every page
+(overview, tournaments list + a live detail page showing an actual
+bracket, venues, players, access) with a locally-installed `--no-save`
+playwright-core, confirmed real data renders correctly (a genuine `RUNNING`
+tournament's stat cards and bracket, an `OWNER` grant showing up correctly
+in both Players and Access), before calling this done.
+
+**Also found and removed**: a stray `app.json` (`{"expo":{}}`) that an
+earlier `eas-cli` invocation run from the repo root (instead of
+`apps/mobile`) had scaffolded there — tooling debris, not part of this
+work, deleted rather than committed.

@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "../_ui/button";
+import { Field, Input } from "../_ui/field";
 
 /**
  * The platform admin's own sign-in — nothing to do with player/venue
@@ -69,59 +71,46 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-stout-900 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-stout-800 p-8">
-        <h1 className="mb-1 font-display text-2xl uppercase tracking-wide text-beer-500">
-          Beermacs admin
-        </h1>
-        <p className="mb-6 text-sm text-beer-100/60">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+        <p className="mb-1 font-display text-xl uppercase tracking-wide text-beer-600">Beermacs admin</p>
+        <p className="mb-6 text-sm text-gray-500">
           {step === "password" ? "Sign in to the platform console." : "Enter the code sent to your email."}
         </p>
 
         {step === "password" ? (
-          <form onSubmit={submitPassword} className="flex flex-col gap-3">
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
-              autoComplete="username"
-              className="rounded-lg border border-white/15 bg-stout-900 px-3 py-2.5 text-sm text-beer-100 outline-none focus:border-beer-500"
-            />
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              placeholder="Password"
-              autoComplete="current-password"
-              className="rounded-lg border border-white/15 bg-stout-900 px-3 py-2.5 text-sm text-beer-100 outline-none focus:border-beer-500"
-            />
-            {error ? <p className="text-sm text-dispute">{error}</p> : null}
-            <button
-              type="submit"
-              disabled={busy || !username || !password}
-              className="mt-2 rounded-lg bg-beer-500 py-2.5 text-sm font-semibold uppercase tracking-wide text-stout-900 disabled:opacity-40"
-            >
+          <form onSubmit={submitPassword} className="flex flex-col gap-3.5">
+            <Field label="Username">
+              <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
+            </Field>
+            <Field label="Password">
+              <Input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                autoComplete="current-password"
+              />
+            </Field>
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+            <Button type="submit" disabled={busy || !username || !password} block className="mt-1">
               {busy ? "Checking…" : "Continue"}
-            </button>
+            </Button>
           </form>
         ) : (
-          <form onSubmit={submitOtp} className="flex flex-col gap-3">
-            <input
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="6-digit code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              className="rounded-lg border border-white/15 bg-stout-900 px-3 py-2.5 text-center text-lg tracking-[0.4em] text-beer-100 outline-none focus:border-beer-500"
-            />
-            {error ? <p className="text-sm text-dispute">{error}</p> : null}
-            <button
-              type="submit"
-              disabled={busy || otp.length !== 6}
-              className="mt-2 rounded-lg bg-beer-500 py-2.5 text-sm font-semibold uppercase tracking-wide text-stout-900 disabled:opacity-40"
-            >
+          <form onSubmit={submitOtp} className="flex flex-col gap-3.5">
+            <Field label="6-digit code">
+              <Input
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                className="text-center text-lg tracking-[0.4em]"
+              />
+            </Field>
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+            <Button type="submit" disabled={busy || otp.length !== 6} block className="mt-1">
               {busy ? "Verifying…" : "Sign in"}
-            </button>
+            </Button>
           </form>
         )}
       </div>
