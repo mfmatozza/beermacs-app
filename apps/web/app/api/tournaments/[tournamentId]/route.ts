@@ -100,6 +100,7 @@ export async function GET(
       format: tournament.format,
       status: tournament.status,
       joinCode: tournament.joinCode,
+      venueId: tournament.venueId,
       config: tournament.config,
       stages,
       tables,

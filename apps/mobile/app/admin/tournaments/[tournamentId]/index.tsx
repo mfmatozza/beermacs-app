@@ -1,81 +1,63 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  ApiError,
-  api,
-  type RoundSummary,
-  type StageSummary,
-  type TournamentDetail,
-} from "../../../../lib/api";
+import { ApiError, api, type TournamentDetail } from "../../../../lib/api";
 import { raw } from "../../../../lib/theme";
+import DisputesSection from "../../../../components/admin/DisputesSection";
+import MessagesSection from "../../../../components/admin/MessagesSection";
+import PlayersSection from "../../../../components/admin/PlayersSection";
+import RoundsSection from "../../../../components/admin/RoundsSection";
+import SettingsSection from "../../../../components/admin/SettingsSection";
+import TablesSection from "../../../../components/admin/TablesSection";
+import TeamsSection from "../../../../components/admin/TeamsSection";
 
 /**
- * Round control (A-13..A-17): open a round, watch several stay open at once
- * (A-14), pause or resume its automatic dispatch (A-15).
- *
- * Deliberately does not try to render the bracket itself — that's milestone 8
- * territory. This screen answers one question at a time: which rounds exist,
- * which are open, how many teams in each are still waiting for an opponent.
+ * The night-of running console. Every section below already had a working,
+ * verified backend (docs/ROADMAP.md Phase 3, "A-1..A-21 (done)") — none of
+ * this is new API surface except table open/closed (A-3/A-4's other half,
+ * `setTableStateInput` existed unused) and the team roster read this and the
+ * pairing/repêchage pickers needed. What was missing was entirely the mobile
+ * UI to reach any of it beyond round control.
  */
+type Section = "rounds" | "teams" | "disputes" | "tables" | "players" | "messages" | "settings";
+
+const SECTIONS: readonly { key: Section; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "rounds", label: "Rounds", icon: "layers-outline" },
+  { key: "teams", label: "Teams", icon: "people-outline" },
+  { key: "disputes", label: "Disputes", icon: "alert-circle-outline" },
+  { key: "tables", label: "Tables", icon: "grid-outline" },
+  { key: "players", label: "Players", icon: "person-outline" },
+  { key: "messages", label: "Messages", icon: "megaphone-outline" },
+  { key: "settings", label: "Settings", icon: "settings-outline" },
+];
+
 export default function TournamentAdminScreen() {
   const insets = useSafeAreaInsets();
   const { tournamentId } = useLocalSearchParams<{ tournamentId: string }>();
   const [detail, setDetail] = useState<TournamentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyRoundKey, setBusyRoundKey] = useState<string | null>(null);
+  const [section, setSection] = useState<Section>("rounds");
+  const [ending, setEnding] = useState(false);
 
   const reload = useCallback(() => {
     return api
       .tournamentDetail(tournamentId)
       .then(setDetail)
-      .catch(() => setError("Couldn't load this tournament. Check your connection."));
+      .catch((e) =>
+        setError(
+          e instanceof ApiError && e.code === "insufficient_role"
+            ? "You don't have permission to run this tournament."
+            : "Couldn't load this tournament. Check your connection."
+        )
+      );
   }, [tournamentId]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  const openRound = useCallback(
-    async (stage: StageSummary, index: number) => {
-      const key = `${stage.id}:${index}`;
-      setBusyRoundKey(key);
-      setError(null);
-      try {
-        await api.openRound(stage.id, index);
-        await reload();
-      } catch (e) {
-        setError(
-          e instanceof ApiError && e.code === "insufficient_role"
-            ? "You don't have permission to run this tournament."
-            : "Couldn't open that round. Try again."
-        );
-      } finally {
-        setBusyRoundKey(null);
-      }
-    },
-    [reload]
-  );
-
-  const toggleScheduling = useCallback(
-    async (round: RoundSummary) => {
-      setBusyRoundKey(round.id);
-      setError(null);
-      try {
-        await api.setRoundScheduling(round.id, { paused: !round.schedulingPaused });
-        await reload();
-      } catch {
-        setError("Couldn't change scheduling for that round. Try again.");
-      } finally {
-        setBusyRoundKey(null);
-      }
-    },
-    [reload]
-  );
-
-  const [ending, setEnding] = useState(false);
   const endTournament = useCallback(() => {
     Alert.alert(
       "End this tournament?",
@@ -111,14 +93,10 @@ export default function TournamentAdminScreen() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-stout-900"
-      contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }}
-      contentContainerClassName="gap-6 px-4"
-    >
+    <View className="flex-1 bg-stout-900" style={{ paddingTop: insets.top + 12 }}>
       {detail ? (
         <>
-          <View className="flex-row items-start justify-between gap-3">
+          <View className="flex-row items-start justify-between gap-3 px-4">
             <View className="flex-1 gap-1">
               <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
                 {detail.name}
@@ -153,118 +131,64 @@ export default function TournamentAdminScreen() {
           </View>
 
           {error ? (
-            <Text className="font-sans text-[13px] leading-[19px] text-dispute">{error}</Text>
+            <Text className="px-4 pt-2 font-sans text-[13px] leading-[19px] text-dispute">
+              {error}
+            </Text>
           ) : null}
 
-          {detail.stages.map((stage) => (
-            <View key={stage.id} className="gap-3">
-              <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-                {stage.type === "GROUP" ? "Group stage" : "Elimination"}
-              </Text>
-
-              {stage.rounds.map((round) => (
-                <RoundCard
-                  key={round.id}
-                  round={round}
-                  busy={busyRoundKey === round.id}
-                  onOpen={() => void openRound(stage, round.index)}
-                  onTogglePause={() => void toggleScheduling(round)}
-                />
-              ))}
-
-              {/* The next round's row doesn't exist until someone opens it
-                  (A-14 lets that happen before this stage's current rounds are
-                  done) — so the action to reach it is always "open round N+1",
-                  not a row that's already there waiting to be flipped. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="mt-4 flex-none"
+            contentContainerClassName="gap-2 px-4"
+          >
+            {SECTIONS.map((s) => (
               <Pressable
-                onPress={() =>
-                  void openRound(stage, (stage.rounds[stage.rounds.length - 1]?.index ?? 0) + 1)
-                }
-                disabled={
-                  busyRoundKey ===
-                  `${stage.id}:${(stage.rounds[stage.rounds.length - 1]?.index ?? 0) + 1}`
-                }
+                key={s.key}
+                onPress={() => setSection(s.key)}
                 accessibilityRole="button"
-                className="flex-row items-center justify-center gap-2 rounded-xl border border-dashed border-stout-500 py-3 active:opacity-70"
+                accessibilityLabel={s.label}
+                accessibilityState={{ selected: section === s.key }}
+                className={`flex-row items-center gap-1.5 rounded-full border px-3 py-2 active:opacity-70 ${
+                  section === s.key ? "border-beer-500 bg-beer-500/15" : "border-stout-600"
+                }`}
               >
-                <Ionicons name="add-circle-outline" size={16} color={raw.beer} />
-                <Text className="font-sans-med text-[13px] text-beer-400">
-                  {`Open round ${(stage.rounds[stage.rounds.length - 1]?.index ?? 0) + 1}`}
+                <Ionicons
+                  name={s.icon}
+                  size={14}
+                  color={section === s.key ? raw.beer : raw.textFaint}
+                />
+                <Text
+                  className={`font-sans-med text-[12px] ${
+                    section === s.key ? "text-beer-400" : "text-cream-dim"
+                  }`}
+                >
+                  {s.label}
                 </Text>
               </Pressable>
-            </View>
-          ))}
+            ))}
+          </ScrollView>
+
+          <View className="mt-4 flex-1">
+            {section === "rounds" ? (
+              <RoundsSection detail={detail} reload={reload} insets={insets} />
+            ) : section === "teams" ? (
+              <TeamsSection tournamentId={tournamentId} insets={insets} />
+            ) : section === "disputes" ? (
+              <DisputesSection tournamentId={tournamentId} insets={insets} />
+            ) : section === "tables" ? (
+              <TablesSection detail={detail} reload={reload} insets={insets} />
+            ) : section === "players" ? (
+              <PlayersSection venueId={detail.venueId} insets={insets} />
+            ) : section === "messages" ? (
+              <MessagesSection tournamentId={tournamentId} insets={insets} />
+            ) : (
+              <SettingsSection detail={detail} reload={reload} insets={insets} />
+            )}
+          </View>
         </>
       ) : (
-        <Text className="font-sans text-[13px] text-dispute">{error}</Text>
-      )}
-    </ScrollView>
-  );
-}
-
-function RoundCard({
-  round,
-  busy,
-  onOpen,
-  onTogglePause,
-}: {
-  round: RoundSummary;
-  busy: boolean;
-  onOpen: () => void;
-  onTogglePause: () => void;
-}) {
-  const open = round.status === "open";
-
-  return (
-    <View className="gap-3 rounded-2xl border border-stout-600 bg-stout-750/85 p-4">
-      <View className="flex-row items-center gap-2">
-        <Text className="font-display text-xl uppercase tracking-[0.8px] text-cream">
-          {`Round ${round.index}`}
-        </Text>
-        <View
-          className={`rounded-full border px-2 py-0.5 ${
-            open ? "border-live bg-live-wash" : "border-stout-500"
-          }`}
-        >
-          <Text
-            className={`font-sans-med text-[10px] uppercase tracking-[1px] ${
-              open ? "text-live" : "text-cream-faint"
-            }`}
-          >
-            {open ? "Open" : "Not opened"}
-          </Text>
-        </View>
-        <View className="flex-1" />
-        {busy ? <ActivityIndicator size="small" color={raw.beer} /> : null}
-      </View>
-
-      <Text className="font-sans text-[13px] text-cream-dim">
-        {`${round.matchCount} match${round.matchCount === 1 ? "" : "es"} · ${round.waitingCount} waiting for a table`}
-      </Text>
-
-      {open ? (
-        <View className="flex-row items-center justify-between">
-          <Text className="font-sans-med text-[13px] text-cream">Automatic dispatch</Text>
-          <Switch
-            value={!round.schedulingPaused}
-            onValueChange={onTogglePause}
-            disabled={busy}
-            trackColor={{ false: raw.hairline, true: raw.beer }}
-          />
-        </View>
-      ) : (
-        <Pressable
-          onPress={onOpen}
-          disabled={busy}
-          accessibilityRole="button"
-          className={`min-h-[44px] items-center justify-center rounded-lg bg-beer-500 px-6 active:opacity-70 ${
-            busy ? "opacity-60" : ""
-          }`}
-        >
-          <Text className="font-display text-lg uppercase tracking-[0.8px] text-stout-900">
-            Open round
-          </Text>
-        </Pressable>
+        <Text className="px-4 font-sans text-[13px] text-dispute">{error}</Text>
       )}
     </View>
   );

@@ -6,13 +6,45 @@
 // ./admin-add/route.ts — see lib/teams.ts.
 
 import { createTeamInput } from "@beermacs/shared";
-import { prisma } from "@beermacs/db";
+import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
-import { HttpError, requireViewer } from "@/lib/session";
+import { HttpError, requireVenueRole, requireViewer } from "@/lib/session";
 import { createTeamInTournament } from "@/lib/teams";
 
 export const runtime = "nodejs";
+
+/**
+ * GET /api/tournaments/:tournamentId/teams — the full roster (A-7/A-8's
+ * management screen needs this: withdrawn teams and ones with no match yet
+ * are invisible to the public board, but an admin still has to see and act
+ * on them). Also backs the manual-pairing (A-16) and repêchage (A-9/A-10)
+ * pickers, which need team NAMES, not just the ids the board's
+ * `entrantTeamIds` gives.
+ */
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ tournamentId: string }> }
+) {
+  try {
+    const { tournamentId } = await params;
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { venueId: true },
+    });
+    if (!tournament) throw new HttpError(404, "tournament_not_found");
+    await requireVenueRole(tournament.venueId, Role.VENUE_STAFF);
+
+    const teams = await prisma.team.findMany({
+      where: { tournamentId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, joinCode: true, entryRound: true, withdrawn: true },
+    });
+    return NextResponse.json({ teams });
+  } catch (e) {
+    return handleError(e);
+  }
+}
 
 export async function POST(
   req: Request,

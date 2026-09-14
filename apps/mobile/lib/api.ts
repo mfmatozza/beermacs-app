@@ -5,15 +5,24 @@
 // sees the same user.
 
 import type {
+  AdminAddTeamInput,
+  AssignTableInput,
   CreateTeamInput,
   CreateTournamentInput,
   JoinTeamInput,
   JoinTournamentInput,
+  ManualPairInput,
   PushPreferencesInput,
   RejectResultInput,
+  RepechageInput,
   ReportResultInput,
+  SendAdminMessageInput,
   SetRoundSchedulingInput,
+  SetTableStateInput,
+  StaffResolveInput,
   UpdateAvatarInput,
+  UpdateTournamentInput,
+  WithdrawTeamInput,
 } from "@beermacs/shared";
 import { authClient } from "./auth-client";
 import { API_URL } from "./config";
@@ -134,6 +143,14 @@ export interface TournamentDetail {
   readonly format: string;
   readonly status: string;
   readonly joinCode: string;
+  readonly venueId: string;
+  readonly config: {
+    playersPerTeam: number | null;
+    chatEnabled: boolean;
+    cupsToWin: number | null;
+    confirmTimeoutMins: number | null;
+    autoRepechageMode: "auto" | "manual" | null;
+  };
   readonly stages: readonly StageSummary[];
   readonly tables: readonly { id: string; label: string; state: string; sortOrder: number }[];
 }
@@ -219,6 +236,33 @@ export interface TournamentHistoryEntry {
 export interface NotificationPreferences {
   readonly match: boolean;
   readonly news: boolean;
+}
+
+// ── Admin console (A-1..A-21) — the parts the mobile UI didn't expose yet,
+// even though every one of these routes was already built and verified
+// against Neon (docs/ROADMAP.md Phase 3). ──────────────────────────────────
+
+export interface TeamRosterEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly joinCode: string;
+  readonly entryRound: number;
+  readonly withdrawn: boolean;
+}
+
+export interface VenuePlayer {
+  readonly userId: string;
+  readonly displayName: string;
+  readonly email: string;
+  readonly phone: string;
+  readonly role: string;
+  readonly joinedAt: string;
+}
+
+export interface DispatchSummary {
+  readonly newMatches: number;
+  readonly autoRepechages: number;
+  readonly tableAssignments: number;
 }
 
 export const api = {
@@ -336,5 +380,68 @@ export const api = {
   deleteChatMessage: (messageId: string) =>
     request<{ id: string; deleted: boolean }>(`/api/chat/messages/${messageId}`, {
       method: "DELETE",
+    }),
+
+  // ── Admin console: teams (A-7..A-11) ────────────────────────────────────
+  listTeams: (tournamentId: string) =>
+    request<{ teams: readonly TeamRosterEntry[] }>(`/api/tournaments/${tournamentId}/teams`),
+  adminAddTeam: (tournamentId: string, body: AdminAddTeamInput) =>
+    request<{ id: string; name: string; entryRound: number; joinCode: string }>(
+      `/api/tournaments/${tournamentId}/teams/admin-add`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  withdrawTeam: (teamId: string, body: WithdrawTeamInput = {}) =>
+    request<{ id: string; withdrawn: boolean }>(`/api/teams/${teamId}/withdraw`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  manualPair: (roundId: string, body: ManualPairInput) =>
+    request<{ matchId: string }>(`/api/rounds/${roundId}/pair`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  repechage: (roundId: string, body: RepechageInput = {}) =>
+    request<{ roundId: string; teamId: string }>(`/api/rounds/${roundId}/repechage`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  // ── Admin console: disputes (A-12) ──────────────────────────────────────
+  resolveMatch: (matchId: string, body: StaffResolveInput) =>
+    request<{ id: string; state: MatchStateName; winnerId: string | null }>(
+      `/api/matches/${matchId}/resolve`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+
+  // ── Admin console: tables (A-3/A-4) ─────────────────────────────────────
+  assignTable: (matchId: string, body: AssignTableInput) =>
+    request<{ id: string; tableId: string; state: MatchStateName }>(
+      `/api/matches/${matchId}/assign-table`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  setTableState: (tableId: string, body: SetTableStateInput) =>
+    request<{ id: string; state: "open" | "closed" }>(`/api/tables/${tableId}/state`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  runDispatch: (venueId: string) =>
+    request<DispatchSummary>(`/api/venues/${venueId}/dispatch/run`, { method: "POST" }),
+
+  // ── Admin console: players (A-21) ───────────────────────────────────────
+  listPlayers: (venueId: string) =>
+    request<{ players: readonly VenuePlayer[] }>(`/api/venues/${venueId}/players`),
+
+  // ── Admin console: messaging (A-18/A-19) ────────────────────────────────
+  sendAdminMessage: (tournamentId: string, body: SendAdminMessageInput) =>
+    request<{ id: string; channelId: string; channelKind: string }>(
+      `/api/tournaments/${tournamentId}/messages`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+
+  // ── Admin console: settings (A-6) ───────────────────────────────────────
+  updateTournament: (tournamentId: string, body: UpdateTournamentInput) =>
+    request<{ id: string; format: string }>(`/api/tournaments/${tournamentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
     }),
 };

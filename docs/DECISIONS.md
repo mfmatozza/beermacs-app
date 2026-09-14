@@ -652,3 +652,59 @@ connect timeout (tens of seconds) fires before anything else does.
 to reach the API, check `vercel logs` FIRST (whether the request arrived at
 all) before assuming it's a backend bug, exactly what should have narrowed
 this down faster.
+
+---
+
+## D22 — Mobile admin console built out to match the backend it already had
+
+Direct feedback, 2026-09-14: "the admin page is completely not done
+whatsoever... we need to be gods." True of the mobile UI, not the backend —
+`docs/ROADMAP.md`'s Phase 3 (A-1..A-21) was already built and verified
+against Neon: create tournament, round control, team management, repêchage,
+player directory, messaging, format change. Only three mobile screens ever
+called into any of it (venue list, create-tournament, round control) — every
+other endpoint was reachable only by hand-running a script against the
+database, which is how every DB change earlier this session actually got
+made.
+
+Restructured `admin/tournaments/[tournamentId]/index.tsx` into a shell with
+a horizontal section switcher — Rounds (existing), Teams, Disputes, Tables,
+Players, Messages, Settings — each its own component under
+`components/admin/`, matching this app's per-screen-local-component pattern
+rather than a shared design-system library.
+
+**Two real backend gaps found while wiring this up, not just missing UI**:
+- `setTableStateInput` (@beermacs/shared) has existed since tables were
+  first modeled — nothing had ever called it. Added
+  `POST /api/tables/:tableId/state` (VENUE_STAFF+, refuses a BUSY table with
+  `table_in_use` rather than silently closing a table mid-match).
+- No endpoint returned a tournament's full team roster with names —
+  the public board only carries entrant IDs, insufficient for a
+  withdraw/manage list. Added `GET /api/tournaments/:tournamentId/teams`.
+
+**Scope cuts made deliberately, not silently**:
+- Repêchage from the app is always auto-pick (A-9), never a named choice
+  (A-10) — the eligible pool is computed server-side inside the repechage
+  route and never returned to a caller, so there's nothing real to build a
+  picker against yet.
+- Manual pairing (A-16) isn't in this pass — it needs waiting-team names
+  cross-referenced against the board's entrant ids, real complexity for an
+  override action that auto-dispatch (E-1) already handles for the common
+  case.
+- "Message a person" needs a user id typed in by hand (hint: "from the
+  Players tab") rather than a picker — broadcast/team are the common cases.
+- Settings exposes the config knobs (A-6) only, not the structural `format`
+  change — that one's real risk (a different bracket shape) doesn't belong
+  behind a quick toggle even though the server already guards it correctly.
+
+Verified against Neon: created a real tournament, added a team via
+admin-add, listed the roster, closed/reopened a table, confirmed closing a
+BUSY table correctly 409s instead of silently succeeding. Cleaned up the
+test account and tournament after.
+
+**Not done in this pass** — the other two things asked for alongside this:
+a web `/admin` superadmin panel for granting venue access and editing the
+marketing site's content (astra-app's single-admin + granular page-access
+pattern is the reference — see `~/astra-app/apps/web/lib/{admin-auth,dashboard-access,authz}.ts`),
+and a visual redesign of the web landing page toward a graffiti/streetwear
+poster look. Both are their own substantial pass, not attempted here.
