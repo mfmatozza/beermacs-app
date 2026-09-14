@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { DownloadCta } from "./_landing/download-cta";
 import { Hero } from "./_landing/hero";
+import { HowItWorks } from "./_landing/how-it-works";
 import { LandingFooter } from "./_landing/landing-footer";
-import { PongJourney } from "./_landing/pong-journey";
 import styles from "./_landing/landing.module.css";
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export default function HomePage() {
   return (
     <div className={styles.siteShell}>
       <Hero />
-      <PongJourney />
+      <HowItWorks />
       <DownloadCta />
       <LandingFooter />
     </div>

@@ -1,50 +1,53 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Beermacs design system (web).
- * Palette mirrors the mobile app (apps/mobile/tailwind.config.js) so the site
- * and the app read as the same product. `beer-500` is the brand gold carried
- * over from the original beermacs.com stylesheet, hsl(40 100% 48%).
+ * Beermacs design system (web) — poster/graffiti direction.
  *
- * The app is dark because it is used in a bar at 11pm. The site is light
- * because it is read by a bar owner at their desk. Same palette, opposite
- * ground — the gold has to earn its place against white, so it is used on
- * type and borders rather than poured over the page.
+ * Committed to dark, on purpose, not defaulted into it: the reference is a
+ * spray-paint event poster (black ground, loud yellow/green/orange marks),
+ * and the mobile app is already dark "because it is used in a bar at
+ * 11pm" — the site matching it end to end is more honest than a light
+ * "read at a desk" mode this brand doesn't actually need. No toggle, no
+ * `prefers-color-scheme` branch: one look, committed.
  * ──────────────────────────────────────────────────────────────────────── */
 @theme {
   --color-beer-100: #fff0ce;
   --color-beer-200: #ffde95;
-  --color-beer-400: #ffb12a;
-  --color-beer-500: #f5a300; /* brand gold */
-  --color-beer-600: #d07f00;
-  --color-beer-700: #a15d00; /* the readable one on white */
-  --color-beer-800: #6e3d00;
+  --color-beer-400: #ffc22a;
+  --color-beer-500: #ffcc00; /* brand gold, brightened for a black ground */
+  --color-beer-600: #d9a800;
+  --color-beer-700: #a17a00;
 
-  --color-stout-700: #1c1915;
-  --color-stout-800: #151310;
+  --color-stout-700: #211d17;
+  --color-stout-800: #16130f;
   --color-stout-900: #0a0908;
 
-  --color-live: #3d7a52;
-  --color-dispute: #a83526;
+  --color-live: #3ec46d;
+  --color-dispute: #ff5a3c;
 
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* The three marker colors off the poster — squiggles, splatter, spiral. */
+  --color-graffiti-green: #3cb043;
+  --color-graffiti-orange: #ff6a1a;
+  --color-graffiti-yellow: var(--color-beer-500);
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
 }
 
 html {
-  /* Warm-tinted backdrop so cards lift off it without needing a shadow. */
-  background: linear-gradient(180deg, #faf8f4 0%, #ffffff 340px);
-  background-attachment: fixed;
+  background: var(--color-stout-900);
+  color-scheme: dark;
 }
 
 body {
-  @apply text-stout-800 antialiased;
+  @apply text-beer-100 antialiased;
   font-family: var(--font-sans);
+  background: var(--color-stout-900);
 }
 
 /* Brand focus ring across the site. */
 :where(a, button, input, select, textarea):focus-visible {
-  outline: 2px solid var(--color-beer-700);
+  outline: 2px solid var(--color-beer-500);
   outline-offset: 2px;
   border-radius: 6px;
 }

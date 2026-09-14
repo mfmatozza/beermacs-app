@@ -1,19 +1,19 @@
 import { AppStoreButton } from "./app-store-button";
+import { DotGrid, SpiralMark, SplatterStar, Squiggle } from "./graffiti-marks";
 import { PhoneMockup } from "./phone-mockup";
-import { ThemeToggle } from "./theme-toggle";
 import { Wordmark } from "./wordmark";
 import styles from "./landing.module.css";
 
 export function Hero() {
   return (
     <header className={styles.hero}>
-      <div className={styles.ambient} aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
-        <i />
-        <i />
+      <div className={styles.heroMarks} aria-hidden="true">
+        <Squiggle className={styles.markSquiggle} />
+        <SplatterStar className={styles.markStarLeft} />
+        <SplatterStar className={styles.markStarRight} />
+        <SpiralMark className={styles.markSpiral} />
+        <DotGrid className={styles.markDotsLeft} />
+        <DotGrid className={styles.markDotsRight} />
       </div>
       <nav className={styles.nav} aria-label="Main navigation">
         <a href="#top" className={styles.navBrand} aria-label="Beermacs home">
@@ -21,7 +21,6 @@ export function Hero() {
         </a>
         <span className={styles.navRule} />
         <span className={styles.navTag}>THE NIGHT IS YOURS</span>
-        <ThemeToggle />
       </nav>
       <div className={styles.heroGrid} id="top">
         <div className={styles.heroCopy}>
@@ -45,10 +44,6 @@ export function Hero() {
           </div>
         </div>
         <PhoneMockup />
-      </div>
-      <div className={styles.scrollCue} aria-hidden="true">
-        <span>SCROLL TO TAKE THE SHOT</span>
-        <i />
       </div>
     </header>
   );

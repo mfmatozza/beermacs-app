@@ -708,3 +708,56 @@ marketing site's content (astra-app's single-admin + granular page-access
 pattern is the reference — see `~/astra-app/apps/web/lib/{admin-auth,dashboard-access,authz}.ts`),
 and a visual redesign of the web landing page toward a graffiti/streetwear
 poster look. Both are their own substantial pass, not attempted here.
+
+---
+
+## D23 — Landing page rebuilt around the Porter House poster reference; committed to dark, no toggle
+
+Direct feedback, 2026-09-14, with a reference image (a real Beermacs x
+Porter House event poster: black ground, spray-paint yellow wordmark, green
+squiggle, orange splatter stars, a spiral, dot-grid marks) and "I hate [the
+current style]... the animation is a bit fucked."
+
+**Committed the site to dark, full stop** — dropped the light/dark toggle
+(`theme-toggle.tsx`) and the `prefers-color-scheme` branch entirely, no
+longer defaulting light "because a bar owner reads it at a desk" (the old
+`globals.css` comment's own reasoning). The reference is unambiguously a
+dark poster, and the mobile app is already "dark because it's used in a bar
+at 11pm" (same file's other comment) — the site not matching that end to
+end was the actual mismatch. One look, not two half-maintained ones.
+
+**Typography split, not one loud font everywhere**: Bebas Neue (the mobile
+app's own display face, via `next/font/google`) for every structural
+heading, so the brand stays one voice across mobile and web. Luckiest Guy
+is reserved for exactly one thing — the BEERMACS wordmark itself, the
+poster's signature bubble-spray lettering — used broadly it would read as
+novelty, not brand; used once it's the moment.
+
+**Hand-drawn accent marks** (`graffiti-marks.tsx`: squiggle, splatter star,
+spiral, dot-grid, zigzag) as plain inline SVG, no image assets — colored via
+`currentColor` so they pick up the three marker colors (gold/green/orange)
+straight from the same CSS tokens as everything else.
+
+**The pong-ball scroll animation is gone, not fixed.** `use-pong-scroll.ts`
+was ~90 lines of hand-tuned scroll-position-to-CSS-custom-property physics
+(flight arc, spin, camera zoom, a "liquid portal" reveal) — real,
+deliberate work, but exactly the kind of thing that reads as "a bit fucked"
+the moment a viewport size, frame drop, or reduced-motion setting catches
+it wrong, and debugging it blind (no specific repro given) risked papering
+over one bug while leaving the next. Replaced with `how-it-works.tsx`: three
+static, loud, graffiti-styled step cards (Join → Play → Win). A poster
+doesn't need to move to hit, and three cards can't be "a bit" broken — they
+either render or they don't.
+
+**Verified visually, not just via typecheck**: installed `playwright-core`
+locally with `--no-save` (kept out of package.json/lockfile), screenshotted
+the running dev server at both desktop (1280px) and mobile (390px)
+viewports, confirmed the layout, marks, and type all read as intended
+before calling this done, then uninstalled it. Screenshots aren't checked
+in — this was a one-time visual QA pass, not tooling this repo keeps.
+
+**Not done in this pass**: the phone mockup still shows placeholder
+content ("APP SCREENSHOT PLACEHOLDER") — a real screenshot needs the actual
+shipped app, not a mockup rebuild. The web `/admin` panel (access control +
+landing content editing) is still the other open piece from this same
+round of feedback.
