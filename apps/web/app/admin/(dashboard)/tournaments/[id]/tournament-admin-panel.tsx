@@ -14,6 +14,7 @@ type Team = TournamentAdminData["teams"][number];
 type Stage = TournamentAdminData["stages"][number];
 type Round = Stage["rounds"][number];
 type Match = Round["matches"][number];
+type VenueTable = TournamentAdminData["venue"]["tables"][number];
 
 const STATUS_TONE = {
   DRAFT: "neutral",
@@ -80,6 +81,7 @@ export function TournamentAdminPanel({ tournament: t }: { tournament: Tournament
     }
   };
 
+  const teamsById = new Map(t.teams.map((team) => [team.id, team.name] as const));
   const matchCount = t.stages.reduce((s, st) => s + st.rounds.reduce((n, r) => n + r.matches.length, 0), 0);
   const disputedCount = t.stages.reduce(
     (s, st) => s + st.rounds.reduce((n, r) => n + r.matches.filter((m) => m.state === "DISPUTED").length, 0),
@@ -123,7 +125,14 @@ export function TournamentAdminPanel({ tournament: t }: { tournament: Tournament
         <div className="flex flex-col gap-4 lg:col-span-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Bracket</h2>
           {t.stages.map((stage) => (
-            <StageCard key={stage.id} stage={stage} tournamentEnded={t.status === "COMPLETE"} onChanged={refresh} />
+            <StageCard
+              key={stage.id}
+              stage={stage}
+              tournamentEnded={t.status === "COMPLETE"}
+              teamsById={teamsById}
+              venueTables={t.venue.tables}
+              onChanged={refresh}
+            />
           ))}
         </div>
         <div className="flex flex-col gap-4">
@@ -232,10 +241,14 @@ function SettingsPanel({
 function StageCard({
   stage,
   tournamentEnded,
+  teamsById,
+  venueTables,
   onChanged,
 }: {
   stage: Stage;
   tournamentEnded: boolean;
+  teamsById: ReadonlyMap<string, string>;
+  venueTables: readonly VenueTable[];
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -272,6 +285,8 @@ function StageCard({
             key={round.id}
             round={round}
             tournamentEnded={tournamentEnded}
+            teamsById={teamsById}
+            venueTables={venueTables}
             onOpen={() => void openRound(round.index)}
             openBusy={busy}
             onChanged={onChanged}
@@ -291,17 +306,29 @@ function StageCard({
 function RoundRow({
   round,
   tournamentEnded,
+  teamsById,
+  venueTables,
   onOpen,
   openBusy,
   onChanged,
 }: {
   round: Round;
   tournamentEnded: boolean;
+  teamsById: ReadonlyMap<string, string>;
+  venueTables: readonly VenueTable[];
   onOpen: () => void;
   openBusy: boolean;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+
+  // Same rule POST /rounds/:id/pair enforces server-side (waitingTeams() in
+  // @beermacs/shared): an entrant of this round not yet on either side of
+  // any of its matches, in any state — that's who a manual pair can use.
+  const pairedIds = new Set(
+    round.matches.flatMap((m) => [m.homeTeam?.id, m.awayTeam?.id].filter((id): id is string => Boolean(id)))
+  );
+  const waitingTeamIds = round.entrants.map((e) => e.teamId).filter((id) => !pairedIds.has(id));
 
   const togglePause = async () => {
     setBusy(true);
@@ -349,10 +376,99 @@ function RoundRow({
       ) : (
         <div className="flex flex-col gap-1.5">
           {round.matches.map((m) => (
-            <MatchRow key={m.id} match={m} tournamentEnded={tournamentEnded} onChanged={onChanged} />
+            <MatchRow key={m.id} match={m} tournamentEnded={tournamentEnded} venueTables={venueTables} onChanged={onChanged} />
           ))}
         </div>
       )}
+      {round.status === "OPEN" && !tournamentEnded && waitingTeamIds.length >= 2 ? (
+        <ManualPairForm roundId={round.id} waitingTeamIds={waitingTeamIds} teamsById={teamsById} onChanged={onChanged} />
+      ) : null}
+    </div>
+  );
+}
+
+function ManualPairForm({
+  roundId,
+  waitingTeamIds,
+  teamsById,
+  onChanged,
+}: {
+  roundId: string;
+  waitingTeamIds: readonly string[];
+  teamsById: ReadonlyMap<string, string>;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [homeTeamId, setHomeTeamId] = useState("");
+  const [awayTeamId, setAwayTeamId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pair = async () => {
+    if (!homeTeamId || !awayTeamId || homeTeamId === awayTeamId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/rounds/${roundId}/pair`, {
+        method: "POST",
+        body: JSON.stringify({ homeTeamId, awayTeamId }),
+      });
+      setHomeTeamId("");
+      setAwayTeamId("");
+      setOpen(false);
+      onChanged();
+    } catch {
+      setError("Couldn't pair those teams — one may already be on a match.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="self-start text-xs font-medium text-beer-700 hover:underline"
+      >
+        Pair teams manually ({waitingTeamIds.length} waiting)
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-lg bg-gray-50 p-2.5">
+      <Field label="Home">
+        <Select value={homeTeamId} onChange={(e) => setHomeTeamId(e.target.value)} className="text-xs">
+          <option value="">Pick a team</option>
+          {waitingTeamIds.map((id) => (
+            <option key={id} value={id} disabled={id === awayTeamId}>
+              {teamsById.get(id) ?? id}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Away">
+        <Select value={awayTeamId} onChange={(e) => setAwayTeamId(e.target.value)} className="text-xs">
+          <option value="">Pick a team</option>
+          {waitingTeamIds.map((id) => (
+            <option key={id} value={id} disabled={id === homeTeamId}>
+              {teamsById.get(id) ?? id}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Button
+        onClick={() => void pair()}
+        disabled={busy || !homeTeamId || !awayTeamId || homeTeamId === awayTeamId}
+        className="text-xs"
+      >
+        {busy ? "Pairing…" : "Create match"}
+      </Button>
+      <button type="button" onClick={() => setOpen(false)} className="text-xs text-gray-500 hover:underline">
+        Cancel
+      </button>
+      {error ? <p className="w-full text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }
@@ -360,17 +476,49 @@ function RoundRow({
 function MatchRow({
   match,
   tournamentEnded,
+  venueTables,
   onChanged,
 }: {
   match: Match;
   tournamentEnded: boolean;
+  venueTables: readonly VenueTable[];
   onChanged: () => void;
 }) {
   const [resolving, setResolving] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [tableId, setTableId] = useState("");
   const [winnerId, setWinnerId] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Mirrors assign-table/route.ts's own transition() guard: only a match
+  // with both slots filled and not already on a table can take one.
+  const assignable =
+    !tournamentEnded &&
+    !match.venueTable &&
+    (match.state === "QUEUED" || match.state === "SCHEDULED") &&
+    Boolean(match.homeTeam) &&
+    Boolean(match.awayTeam);
+
+  const assignTable = async () => {
+    if (!tableId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/matches/${match.id}/assign-table`, {
+        method: "POST",
+        body: JSON.stringify({ tableId }),
+      });
+      setAssigning(false);
+      setTableId("");
+      onChanged();
+    } catch {
+      setError("Couldn't assign that table.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const resolve = async () => {
     if (!winnerId || !reason.trim()) return;
@@ -399,6 +547,15 @@ function MatchRow({
         <span className="flex items-center gap-2">
           {match.venueTable ? <span className="text-gray-400">{match.venueTable.label}</span> : null}
           <Badge tone={MATCH_STATE_TONE[match.state] ?? "neutral"}>{match.state.replace(/_/g, " ")}</Badge>
+          {assignable && venueTables.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setAssigning((v) => !v)}
+              className="font-medium text-beer-700 hover:underline"
+            >
+              {assigning ? "Cancel" : "Assign table"}
+            </button>
+          ) : null}
           {match.state === "DISPUTED" && !tournamentEnded ? (
             <button
               type="button"
@@ -410,6 +567,25 @@ function MatchRow({
           ) : null}
         </span>
       </div>
+
+      {assigning ? (
+        <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-gray-200 pt-2">
+          <Field label="Table">
+            <Select value={tableId} onChange={(e) => setTableId(e.target.value)} className="text-xs">
+              <option value="">Pick a table</option>
+              {venueTables.map((table) => (
+                <option key={table.id} value={table.id}>
+                  {table.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {error ? <p className="text-red-600">{error}</p> : null}
+          <Button onClick={() => void assignTable()} disabled={busy || !tableId} className="self-start text-xs">
+            {busy ? "Assigning…" : "Send to table"}
+          </Button>
+        </div>
+      ) : null}
 
       {resolving ? (
         <div className="mt-2 flex flex-col gap-2 border-t border-gray-200 pt-2">

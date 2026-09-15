@@ -11,7 +11,15 @@ const TOURNAMENT_SELECT = {
   status: true,
   joinCode: true,
   config: true,
-  venue: { select: { id: true, name: true } },
+  venue: {
+    select: {
+      id: true,
+      name: true,
+      // Only OPEN tables are ever legal targets for a manual assign (D26.1
+      // mirrors assign-table/route.ts's own `table.state !== "OPEN"` check).
+      tables: { where: { state: "OPEN" }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true } },
+    },
+  },
   teams: {
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, entryRound: true, withdrawn: true, joinCode: true },
@@ -28,6 +36,10 @@ const TOURNAMENT_SELECT = {
           index: true,
           status: true,
           schedulingPaused: true,
+          // Waiting-teams (entrants not yet in any match of this round) is
+          // what makes manual pairing possible — same set POST /rounds/:id/pair
+          // validates against server-side (waitingTeams() in @beermacs/shared).
+          entrants: { select: { teamId: true } },
           matches: {
             select: {
               id: true,

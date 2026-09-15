@@ -949,3 +949,50 @@ Also added `overflow-x-auto` wrappers around every admin list table
 (tournaments/venues/players — the 7-column tournaments table was the worst
 offender) since `overflow-hidden` alone was clipping columns instead of
 letting them scroll on a narrow screen.
+
+## D26.1 — Manual pairing and manual table assignment: wired into web admin, not deleted
+
+A dead-code audit flagged `manualPair` (mobile API method) and its route
+(`POST /rounds/:id/pair`), plus `assignTable`/`POST /matches/:id/assign-table`,
+as a dead end-to-end contract — both halves exist, neither has ever had a UI.
+Correctly flagged as dead, wrongly bucketed as delete-candidates: these are
+exactly the kind of staff override "give the admin real power" (this
+session's whole thrust) means — pick two waiting teams and force a match,
+or send an existing match to a specific table — bypassing automatic
+dispatch for the one case it can't handle by itself (a captain's phone
+died, two teams want to play out of order, a table's about to free up and
+staff wants it claimed now). Wired both into the tournament detail page
+instead of deleting either side.
+
+**Manual pair**: each `RoundRow` for an `OPEN`, non-ended round now computes
+its own waiting-team list the same way the route validates it server-side
+(`waitingTeams()` in `@beermacs/shared` — an entrant not yet on either side
+of any match in the round, replicated client-side against `round.entrants`
++ `round.matches` since the shape was already in hand). A collapsed
+"Pair teams manually (N waiting)" link expands into two team selects that
+disable whichever team is picked in the other one.
+
+**Manual table assignment**: `MatchRow` gets an "Assign table" action
+whenever a match has both slots filled, isn't already on a table, and is
+`QUEUED`/`SCHEDULED` — the same guard `transition()`'s `assign_table` event
+enforces. Needed the venue's `OPEN` tables added to `TOURNAMENT_SELECT`
+(`venue.tables`, filtered `state: "OPEN"` — the exact set the route itself
+will accept, so a bad pick can't even be offered).
+
+**`blockUser`/`unblockUser`** — flagged in the same audit bucket, but this
+one really doesn't belong with the admin pair: `DELETE /api/users/:id/block`
+is `requireViewer()`-gated, a player's own "hide this person's messages
+from me" preference (see the route's own header comment), not a
+staff/moderation action. `blockUser` is wired (chat.tsx's block button);
+`unblockUned` isn't — no screen lets a player see or undo who they've
+blocked. Real gap, but a player-settings one, not part of "godly admin" —
+left alone pending a decision on where that UI belongs.
+
+Verified against real data: created a 4-team tournament via the admin
+cookie bypass, opened round 1, paired two teams through the new web UI
+(confirmed via `page.waitForResponse` reading the actual 200 body — an
+earlier Playwright run's `browser.close()` had raced ahead of a render and
+produced a misleading stuck-button screenshot even though the request had
+already succeeded server-side, caught by directly querying Postgres before
+trusting it), then assigned the resulting match to Table 1 and watched it
+go `ON TABLE`. Test tournament deleted afterward.
