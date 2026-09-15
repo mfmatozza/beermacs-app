@@ -93,6 +93,7 @@ model User {
   blockedBy     BlockedUser[]     @relation("Blocked")
   mutedIn       MutedPlayer[]     @relation("MutedUser")
   mutedByStaff  MutedPlayer[]     @relation("MutedByStaff")
+  supportMessages SupportMessage[]
 
   @@index([deletedAt])
 }
@@ -715,6 +716,39 @@ model MutedPlayer {
 
   @@unique([tournamentId, userId])
   @@index([tournamentId])
+}
+
+// ─── Support ────────────────────────────────────────────────────────────────
+
+enum SupportSource {
+  /// The public /support contact form — a site visitor, not necessarily
+  /// signed in, so name/email are freehand input rather than read off an
+  /// account.
+  WEB
+  /// The "?" help button in the mobile app's Profile section. Always a real,
+  /// signed-in account — name/email/phone are captured off it at submit
+  /// time (not a live FK-only reference), so the backoffice still has full
+  /// contact details if the account is later deleted.
+  MOBILE
+}
+
+/// One shared inbox for both entry points (guideline 1.2 also wants "a
+/// published way to contact us" independent of chat's own report/block/mute
+/// kit, which is scoped to in-tournament conduct, not general help/feedback).
+model SupportMessage {
+  id         String        @id @default(cuid())
+  userId     String?
+  name       String
+  email      String
+  phone      String?
+  body       String
+  source     SupportSource
+  resolvedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([resolvedAt, createdAt])
 }
 
 // ─── Push ───────────────────────────────────────────────────────────────────

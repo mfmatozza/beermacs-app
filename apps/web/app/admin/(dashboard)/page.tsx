@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@beermacs/db";
+import { Badge } from "../_ui/badge";
 import { Card, StatCard } from "../_ui/card";
 import {
   ChevronRightIcon,
   FileIcon,
+  MailIcon,
   ShieldIcon,
   StoreIcon,
   TrophyIcon,
@@ -33,6 +35,12 @@ const SECTIONS = [
     icon: UsersIcon,
   },
   {
+    href: "/admin/support",
+    label: "Support",
+    blurb: "Contact-form messages and in-app help requests.",
+    icon: MailIcon,
+  },
+  {
     href: "/admin/access",
     label: "Access",
     blurb: "Grant or revoke a venue role for any account.",
@@ -47,7 +55,7 @@ const SECTIONS = [
 ] as const;
 
 export default async function AdminHomePage() {
-  const [venues, users, tournaments, runningNow, matchesToday] = await Promise.all([
+  const [venues, users, tournaments, runningNow, matchesToday, openSupport] = await Promise.all([
     prisma.venue.count({ where: { deletedAt: null } }),
     prisma.user.count({ where: { deletedAt: null } }),
     prisma.tournament.count(),
@@ -55,6 +63,7 @@ export default async function AdminHomePage() {
     prisma.match.count({
       where: { settledAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
     }),
+    prisma.supportMessage.count({ where: { resolvedAt: null } }),
   ]);
 
   return (
@@ -62,10 +71,21 @@ export default async function AdminHomePage() {
       <PageHeader title="Overview" subtitle="What's happening across every venue right now." />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard tone="brand" label="Running now" value={runningNow} hint="Tournaments" icon={<TrophyIcon size={20} />} />
+        <StatCard
+          tone="brand"
+          label="Running now"
+          value={runningNow}
+          hint="Tournaments"
+          icon={<TrophyIcon size={20} />}
+        />
         <StatCard label="Venues" value={venues} icon={<StoreIcon size={20} />} />
         <StatCard label="Accounts" value={users} icon={<UsersIcon size={20} />} />
-        <StatCard label="Tournaments" value={tournaments} hint="All time" icon={<TrophyIcon size={20} />} />
+        <StatCard
+          label="Tournaments"
+          value={tournaments}
+          hint="All time"
+          icon={<TrophyIcon size={20} />}
+        />
         <StatCard label="Matches settled" value={matchesToday} hint="Today" />
       </div>
 
@@ -77,7 +97,12 @@ export default async function AdminHomePage() {
                 <s.icon size={22} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block font-medium text-gray-900">{s.label}</span>
+                <span className="flex items-center gap-2">
+                  <span className="font-medium text-gray-900">{s.label}</span>
+                  {s.href === "/admin/support" && openSupport > 0 ? (
+                    <Badge tone="brand">{openSupport} open</Badge>
+                  ) : null}
+                </span>
                 <span className="block truncate text-sm text-gray-500">{s.blurb}</span>
               </span>
               <span className="text-gray-300 transition-colors group-hover:text-beer-600">

@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
@@ -6,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   Switch,
@@ -35,6 +37,7 @@ import { networkErrorMessage, withTimeout } from "../lib/with-timeout";
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const setSignedIn = useSessionStore((s) => s.setSignedIn);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const meQuery = useQuery({ queryKey: ["me"], queryFn: api.me });
   const historyQuery = useQuery({ queryKey: ["history"], queryFn: api.history });
@@ -61,75 +64,193 @@ export default function ProfileScreen() {
   }, [setSignedIn]);
 
   return (
-    <ScrollView
-      className="flex-1 bg-stout-900"
-      contentContainerStyle={{
-        paddingTop: insets.top + 12,
-        paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
-      }}
-      contentContainerClassName="gap-5 px-4"
-      showsVerticalScrollIndicator={false}
-    >
-      <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">Profile</Text>
-
-      {meQuery.isLoading || !meQuery.data ? (
-        meQuery.isError ? (
-          <Text className="font-sans text-[13px] text-dispute">
-            Couldn&rsquo;t load your profile. Check your connection.
+    <>
+      <ScrollView
+        className="flex-1 bg-stout-900"
+        contentContainerStyle={{
+          paddingTop: insets.top + 12,
+          paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
+        }}
+        contentContainerClassName="gap-5 px-4"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="flex-row items-center justify-between">
+          <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
+            Profile
           </Text>
-        ) : (
-          <ActivityIndicator color={raw.beer} />
-        )
-      ) : (
-        <>
-          <AccountCard me={meQuery.data} />
-
-          <View className="flex-row gap-3">
-            <StatBox label="Tournaments" value={stats.tournaments} />
-            <StatBox label="Wins" value={stats.wins} />
-            <StatBox label="Losses" value={stats.losses} />
-          </View>
-
           <Pressable
-            onPress={() => router.navigate("/history")}
+            onPress={() => setHelpOpen(true)}
+            hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="View tournament history"
-            className="min-h-[48px] flex-row items-center justify-between rounded-2xl border border-stout-600 bg-stout-850 px-4 active:opacity-70"
+            accessibilityLabel="Get help or send feedback"
+            className="h-9 w-9 items-center justify-center rounded-full border border-stout-500 active:opacity-70"
           >
-            <Text className="font-sans-med text-[14px] text-cream">Tournament history</Text>
-            <Text className="font-sans text-[13px] text-beer-400">View →</Text>
+            <Ionicons name="help-outline" size={18} color={raw.textFaint} />
           </Pressable>
+        </View>
 
-          {meQuery.data.memberships.some((m) => m.role === "VENUE_ADMIN" || m.role === "VENUE_OWNER") ? (
-            <Pressable
-              onPress={() => router.push("/admin")}
-              accessibilityRole="button"
-              accessibilityLabel="Manage a venue"
-              className="min-h-[48px] flex-row items-center justify-between rounded-2xl border border-beer-500/40 bg-beer-500/10 px-4 active:opacity-70"
-            >
-              <Text className="font-sans-med text-[14px] text-cream">Manage a venue</Text>
-              <Text className="font-sans text-[13px] text-beer-400">Open →</Text>
-            </Pressable>
-          ) : null}
-
-          <NotificationPreferences />
-          <SecuritySection />
-
-          <Pressable
-            onPress={() => void signOut()}
-            accessibilityRole="button"
-            accessibilityLabel="Sign out"
-            className="min-h-[48px] items-center justify-center rounded-lg border border-stout-500 px-6 active:opacity-70"
-          >
-            <Text className="font-display text-xl uppercase tracking-[0.8px] text-cream">
-              Sign out
+        {meQuery.isLoading || !meQuery.data ? (
+          meQuery.isError ? (
+            <Text className="font-sans text-[13px] text-dispute">
+              Couldn&rsquo;t load your profile. Check your connection.
             </Text>
-          </Pressable>
+          ) : (
+            <ActivityIndicator color={raw.beer} />
+          )
+        ) : (
+          <>
+            <AccountCard me={meQuery.data} />
 
-          <DeleteAccount onDeleted={() => setSignedIn(false)} />
-        </>
-      )}
-    </ScrollView>
+            <View className="flex-row gap-3">
+              <StatBox label="Tournaments" value={stats.tournaments} />
+              <StatBox label="Wins" value={stats.wins} />
+              <StatBox label="Losses" value={stats.losses} />
+            </View>
+
+            <Pressable
+              onPress={() => router.navigate("/history")}
+              accessibilityRole="button"
+              accessibilityLabel="View tournament history"
+              className="min-h-[48px] flex-row items-center justify-between rounded-2xl border border-stout-600 bg-stout-850 px-4 active:opacity-70"
+            >
+              <Text className="font-sans-med text-[14px] text-cream">Tournament history</Text>
+              <Text className="font-sans text-[13px] text-beer-400">View →</Text>
+            </Pressable>
+
+            {meQuery.data.memberships.some(
+              (m) => m.role === "VENUE_ADMIN" || m.role === "VENUE_OWNER"
+            ) ? (
+              <Pressable
+                onPress={() => router.push("/admin")}
+                accessibilityRole="button"
+                accessibilityLabel="Manage a venue"
+                className="min-h-[48px] flex-row items-center justify-between rounded-2xl border border-beer-500/40 bg-beer-500/10 px-4 active:opacity-70"
+              >
+                <Text className="font-sans-med text-[14px] text-cream">Manage a venue</Text>
+                <Text className="font-sans text-[13px] text-beer-400">Open →</Text>
+              </Pressable>
+            ) : null}
+
+            <NotificationPreferences />
+            <SecuritySection />
+
+            <Pressable
+              onPress={() => void signOut()}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              className="min-h-[48px] items-center justify-center rounded-lg border border-stout-500 px-6 active:opacity-70"
+            >
+              <Text className="font-display text-xl uppercase tracking-[0.8px] text-cream">
+                Sign out
+              </Text>
+            </Pressable>
+
+            <DeleteAccount onDeleted={() => setSignedIn(false)} />
+          </>
+        )}
+      </ScrollView>
+      <HelpModal visible={helpOpen} onClose={() => setHelpOpen(false)} />
+    </>
+  );
+}
+
+// ── Help: Profile's "?" button — feeds the same /api/support inbox the web
+// contact form does, so there's one backoffice queue, not two. ─────────────
+
+function HelpModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  const [body, setBody] = useState("");
+  const [sent, setSent] = useState(false);
+
+  const submitMutation = useMutation({
+    mutationFn: () => api.submitSupport({ body: body.trim() }),
+    onSuccess: () => setSent(true),
+    onError: () => Alert.alert("Couldn't send that", "Check your connection and try again."),
+  });
+
+  const close = () => {
+    onClose();
+    // Reset after the close animation, not before — an instant reset would
+    // flash the form back to empty while the sheet is still visibly sliding
+    // away.
+    setTimeout(() => {
+      setBody("");
+      setSent(false);
+      submitMutation.reset();
+    }, 300);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={close}
+    >
+      <View
+        className="flex-1 bg-stout-900 px-5"
+        style={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}
+      >
+        <View className="mb-6 flex-row items-center justify-between">
+          <Text className="font-display text-2xl uppercase tracking-[1.2px] text-cream">
+            Help &amp; feedback
+          </Text>
+          <Pressable
+            onPress={close}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            className="h-9 w-9 items-center justify-center rounded-full border border-stout-500 active:opacity-70"
+          >
+            <Ionicons name="close" size={18} color={raw.textFaint} />
+          </Pressable>
+        </View>
+
+        {sent ? (
+          <View className="flex-1 items-center justify-center gap-3">
+            <Ionicons name="checkmark-circle" size={40} color={raw.beer} />
+            <Text className="font-sans-med text-[15px] text-cream">
+              Sent — we&rsquo;ll reply by email.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <Text className="mb-4 font-sans text-[13px] leading-[19px] text-cream-dim">
+              A bug, a suggestion, a question about your account — this goes straight to us, along
+              with your name and email.
+            </Text>
+            <TextInput
+              value={body}
+              onChangeText={setBody}
+              placeholder="What's going on?"
+              placeholderTextColor={raw.textFaint}
+              multiline
+              autoFocus
+              maxLength={2000}
+              textAlignVertical="top"
+              className="min-h-[160px] rounded-lg border border-stout-500 bg-stout-850 px-4 py-3 font-sans text-[15px] text-cream"
+            />
+            <Pressable
+              onPress={() => void submitMutation.mutate()}
+              disabled={!body.trim() || submitMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Send"
+              className={`mt-4 min-h-[48px] items-center justify-center rounded-lg bg-beer-500 px-6 active:opacity-70 ${
+                !body.trim() || submitMutation.isPending ? "opacity-40" : ""
+              }`}
+            >
+              {submitMutation.isPending ? (
+                <ActivityIndicator size="small" color={raw.canvas} />
+              ) : (
+                <Text className="font-display text-lg uppercase tracking-[0.6px] text-stout-900">
+                  Send
+                </Text>
+              )}
+            </Pressable>
+          </>
+        )}
+      </View>
+    </Modal>
   );
 }
 
@@ -163,7 +284,11 @@ function AccountCard({ me }: { me: MeResponse }) {
       // and would apply excess-property checking to a literal. `displayName`/
       // `phone` (Better Auth additionalFields, see apps/web/lib/auth.ts) still
       // reach the server at runtime either way.
-      const payload = { name: displayName.trim(), displayName: displayName.trim(), phone: phone.trim() };
+      const payload = {
+        name: displayName.trim(),
+        displayName: displayName.trim(),
+        phone: phone.trim(),
+      };
       const res = await withTimeout(authClient.updateUser(payload));
       if (res.error) {
         setSaveError(res.error.message ?? "Couldn't save those changes.");
@@ -200,7 +325,9 @@ function AccountCard({ me }: { me: MeResponse }) {
     }
     setAvatarBusy(true);
     try {
-      await api.setAvatar({ image: `data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}` });
+      await api.setAvatar({
+        image: `data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`,
+      });
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     } catch {
       setAvatarError("Couldn't upload that photo. Try again in a moment.");
@@ -266,7 +393,9 @@ function AccountCard({ me }: { me: MeResponse }) {
           {saving ? (
             <ActivityIndicator size="small" color={raw.beer} />
           ) : (
-            <Text className="font-sans-med text-[13px] text-beer-400">{editing ? "Save" : "Edit"}</Text>
+            <Text className="font-sans-med text-[13px] text-beer-400">
+              {editing ? "Save" : "Edit"}
+            </Text>
           )}
         </Pressable>
       </View>
@@ -285,13 +414,21 @@ function AccountCard({ me }: { me: MeResponse }) {
           />
         </View>
       ) : (
-        <Text className="font-sans text-[13px] text-cream-dim">{me.user.phone || "No phone on file"}</Text>
+        <Text className="font-sans text-[13px] text-cream-dim">
+          {me.user.phone || "No phone on file"}
+        </Text>
       )}
       {saveError ? <Text className="font-sans text-[12px] text-dispute">{saveError}</Text> : null}
-      {avatarError ? <Text className="font-sans text-[12px] text-dispute">{avatarError}</Text> : null}
+      {avatarError ? (
+        <Text className="font-sans text-[12px] text-dispute">{avatarError}</Text>
+      ) : null}
 
       {me.user.image ? (
-        <Pressable onPress={() => void removeAvatar()} disabled={avatarBusy} accessibilityRole="button">
+        <Pressable
+          onPress={() => void removeAvatar()}
+          disabled={avatarBusy}
+          accessibilityRole="button"
+        >
           <Text className="font-sans-med text-[12px] text-cream-faint">Remove photo</Text>
         </Pressable>
       ) : null}
@@ -396,7 +533,9 @@ function SecuritySection() {
     }
     setBusy(true);
     try {
-      const res = await withTimeout(authClient.changePassword({ currentPassword: current, newPassword: next }));
+      const res = await withTimeout(
+        authClient.changePassword({ currentPassword: current, newPassword: next })
+      );
       if (res.error) {
         setError(res.error.message ?? "Couldn't change your password. Check your current one.");
         return;
@@ -515,7 +654,9 @@ function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
               try {
                 const res = await withTimeout(authClient.deleteUser({ password }));
                 if (res.error) {
-                  setError(res.error.message ?? "Couldn't delete your account. Check your password.");
+                  setError(
+                    res.error.message ?? "Couldn't delete your account. Check your password."
+                  );
                   return;
                 }
                 onDeleted();

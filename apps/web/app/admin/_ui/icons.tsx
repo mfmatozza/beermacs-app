@@ -126,6 +126,16 @@ export function XIcon(props: IconProps) {
   );
 }
 
+/** Envelope — the support inbox. */
+export function MailIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} aria-hidden="true">
+      <path d="M4.5 5.5h15a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z" />
+      <path d="m4 6 8 6.5L20 6" />
+    </svg>
+  );
+}
+
 /** Beer cups — a live/on-table match. */
 export function CupsIcon(props: IconProps) {
   return (

@@ -372,3 +372,15 @@ export const updateTableInput = z.object({
   label: z.string().trim().min(1).max(24),
 });
 export type UpdateTableInput = z.infer<typeof updateTableInput>;
+
+// ── Support ──────────────────────────────────────────────────────────────────
+
+/** Payload for POST /api/support. name/email are required in the body only
+ *  for a signed-out web visitor — a signed-in caller (the mobile app's help
+ *  button) has them filled server-side from the session and can omit both. */
+export const submitSupportMessageInput = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  email: z.string().trim().toLowerCase().email().optional(),
+  body: z.string().trim().min(1).max(2000),
+});
+export type SubmitSupportMessageInput = z.infer<typeof submitSupportMessageInput>;

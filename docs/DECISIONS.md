@@ -1051,3 +1051,33 @@ Verified against real, live data throughout — not just typechecked: seeded
 a tournament, drove the actual report/confirm/win flow on-device, watched
 the "Advancing" copy and the accent-bordered bracket rows render correctly,
 confirmed the chat fix by sending real messages between two real accounts.
+
+## D27 — A real support inbox (web contact form + mobile "?" button → backoffice)
+
+Both entry points asked for write to one place: `SupportMessage` (new model,
+`WEB`/`MOBILE` source enum), `POST /api/support`. Deliberately no auth
+requirement on the route itself — a signed-in caller (the mobile app's "?"
+button in Profile) gets name/email/phone read straight off the session
+(`currentViewer()`, optional — doesn't throw when signed out), so it can't
+misrepresent who it is; a signed-out one (the public `/support` form) must
+supply name+email itself. One inbox either way: `/admin/support`, platform-
+admin only like Access and Site content (a contact-form message isn't
+about any one venue), with a "Mark resolved"/"Reopen" toggle and an open-
+count badge on the Overview page.
+
+**Found and fixed a real, pre-existing bug while building this**: the
+`/privacy`, `/terms`, `/support` pages, `PageHeader`, `PageFooter`, and the
+`Logo` component were all using `text-stout-900`/`text-stout-700` for text
+— but `stout-900` (`#0a0908`) is the *body background* itself (globals.css:
+"Committed to dark... the site matching \[the mobile app\] end to end,"
+D23's dark-poster direction applies site-wide, not just the landing hero).
+Headings were rendering literally the same color as the page — fully
+invisible, not just low-contrast — and had been live this whole time,
+including as the exact Privacy Policy and Support URLs handed to Apple
+earlier today. Never caught because nobody had actually screenshotted these
+pages before; every previous check was a `fetch().status === 200`, which
+says nothing about whether the content is visible. Fixed all six spots to
+the site's actual light-on-dark palette (`beer-100` body/heading text,
+`beer-500` links and accents, `stout-800` input fill) and re-verified with
+real screenshots this time, including a full form submission through the
+UI end to end (not just the API).

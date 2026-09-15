@@ -20,6 +20,7 @@ import type {
   SetRoundSchedulingInput,
   SetTableStateInput,
   StaffResolveInput,
+  SubmitSupportMessageInput,
   UpdateAvatarInput,
   UpdateTeamInput,
   UpdateTournamentInput,
@@ -272,8 +273,7 @@ export const api = {
   setAvatar: (body: UpdateAvatarInput) =>
     request<{ image: string }>("/api/me/avatar", { method: "PUT", body: JSON.stringify(body) }),
   removeAvatar: () => request<{ image: null }>("/api/me/avatar", { method: "DELETE" }),
-  notificationPreferences: () =>
-    request<NotificationPreferences>("/api/push/preferences"),
+  notificationPreferences: () => request<NotificationPreferences>("/api/push/preferences"),
   setNotificationPreferences: (body: PushPreferencesInput) =>
     request<{ ok: boolean }>("/api/push/preferences", {
       method: "PATCH",
@@ -373,6 +373,9 @@ export const api = {
     request<{ blockedUserId: string; blocked: boolean }>(`/api/users/${userId}/block`, {
       method: "POST",
     }),
+  // ── Support (Profile's "?" button) ──────────────────────────────────────
+  submitSupport: (body: SubmitSupportMessageInput) =>
+    request<{ id: string }>(`/api/support`, { method: "POST", body: JSON.stringify(body) }),
   unblockUser: (userId: string) =>
     request<{ blockedUserId: string; blocked: boolean }>(`/api/users/${userId}/block`, {
       method: "DELETE",
@@ -405,7 +408,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
-  deleteTeam: (teamId: string) => request<{ id: string; deleted: boolean }>(`/api/teams/${teamId}`, { method: "DELETE" }),
+  deleteTeam: (teamId: string) =>
+    request<{ id: string; deleted: boolean }>(`/api/teams/${teamId}`, { method: "DELETE" }),
   manualPair: (roundId: string, body: ManualPairInput) =>
     request<{ id: string }>(`/api/rounds/${roundId}/pair`, {
       method: "POST",

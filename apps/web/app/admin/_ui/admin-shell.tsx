@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   FileIcon,
   HomeIcon,
+  MailIcon,
   MenuIcon,
   ShieldIcon,
   StoreIcon,
@@ -19,6 +20,7 @@ const NAV = [
   { href: "/admin/tournaments", label: "Tournaments", icon: TrophyIcon },
   { href: "/admin/venues", label: "Venues", icon: StoreIcon },
   { href: "/admin/users", label: "Players", icon: UsersIcon },
+  { href: "/admin/support", label: "Support", icon: MailIcon },
   { href: "/admin/access", label: "Access", icon: ShieldIcon },
   { href: "/admin/content", label: "Site content", icon: FileIcon },
 ] as const;
@@ -39,14 +41,17 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-1 flex-col gap-0.5">
       {NAV.map((item) => {
-        const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+        const active =
+          item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
         return (
           <Link
             key={item.href}
             href={item.href}
             onClick={onNavigate}
             className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-              active ? "bg-beer-100 text-beer-700" : "text-gray-600 hover:bg-beer-100 hover:text-beer-700"
+              active
+                ? "bg-beer-100 text-beer-700"
+                : "text-gray-600 hover:bg-beer-100 hover:text-beer-700"
             }`}
           >
             <item.icon size={18} className={active ? "text-beer-600" : "text-gray-400"} />
@@ -58,7 +63,13 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AdminShell({ children, logout }: { children: React.ReactNode; logout: React.ReactNode }) {
+export function AdminShell({
+  children,
+  logout,
+}: {
+  children: React.ReactNode;
+  logout: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
