@@ -9,9 +9,6 @@ export default function TermsPage() {
       <PageHeader />
       <main className="mx-auto max-w-2xl px-6 py-16">
         <h1 className="text-3xl font-semibold tracking-tight text-stout-900">Terms</h1>
-        <p className="mt-4 rounded-xl border border-beer-200 bg-beer-100/50 px-4 py-3 text-sm text-stout-700">
-          Draft. To be reviewed before the app is submitted to the App Store.
-        </p>
         <div className="mt-6 space-y-4 text-stout-700/85">
           <h2 className="pt-2 text-lg font-semibold text-stout-900">Using Beermacs</h2>
           <p className="leading-relaxed">
