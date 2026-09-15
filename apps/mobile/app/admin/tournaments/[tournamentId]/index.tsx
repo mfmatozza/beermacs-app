@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -97,13 +97,24 @@ export default function TournamentAdminScreen() {
       {detail ? (
         <>
           <View className="flex-row items-start justify-between gap-3 px-4">
-            <View className="flex-1 gap-1">
-              <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
-                {detail.name}
-              </Text>
-              <Text className="font-sans text-[13px] text-cream-dim">
-                Join code {detail.joinCode} · {detail.tables.length} tables
-              </Text>
+            <View className="flex-1 flex-row items-start gap-2">
+              <Pressable
+                onPress={() => (router.canGoBack() ? router.back() : router.replace("/admin"))}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Back to your venues"
+                className="mt-1 active:opacity-60"
+              >
+                <Ionicons name="chevron-back" size={22} color="#F1EADB" />
+              </Pressable>
+              <View className="flex-1 gap-1">
+                <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
+                  {detail.name}
+                </Text>
+                <Text className="font-sans text-[13px] text-cream-dim">
+                  Join code {detail.joinCode} · {detail.tables.length} tables
+                </Text>
+              </View>
             </View>
             {detail.status === "COMPLETE" ? (
               <View className="rounded-full border border-stout-500 px-3 py-1.5">

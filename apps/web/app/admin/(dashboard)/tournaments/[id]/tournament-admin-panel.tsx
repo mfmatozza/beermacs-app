@@ -321,6 +321,7 @@ function RoundRow({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Same rule POST /rounds/:id/pair enforces server-side (waitingTeams() in
   // @beermacs/shared): an entrant of this round not yet on either side of
@@ -332,12 +333,15 @@ function RoundRow({
 
   const togglePause = async () => {
     setBusy(true);
+    setError(null);
     try {
       await api(`/api/rounds/${round.id}/scheduling`, {
         method: "POST",
         body: JSON.stringify({ paused: !round.schedulingPaused }),
       });
       onChanged();
+    } catch {
+      setError("Couldn't change scheduling for that round.");
     } finally {
       setBusy(false);
     }
@@ -371,6 +375,7 @@ function RoundRow({
           </button>
         ) : null}
       </div>
+      {error ? <p className="mb-1.5 text-xs text-red-600">{error}</p> : null}
       {round.matches.length === 0 ? (
         <p className="text-xs text-gray-400">No matches paired yet.</p>
       ) : (
@@ -679,6 +684,7 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(team.name);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const rename = async () => {
     if (!name.trim() || name === team.name) {
@@ -686,9 +692,12 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
       return;
     }
     setBusy(true);
+    setError(null);
     try {
       await api(`/api/teams/${team.id}`, { method: "PATCH", body: JSON.stringify({ name: name.trim() }) });
       onChanged();
+    } catch {
+      setError("Couldn't rename — that name may already be in use.");
     } finally {
       setBusy(false);
       setEditing(false);
@@ -697,9 +706,12 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
 
   const withdraw = async () => {
     setBusy(true);
+    setError(null);
     try {
       await api(`/api/teams/${team.id}/withdraw`, { method: "POST", body: JSON.stringify({}) });
       onChanged();
+    } catch {
+      setError("Couldn't withdraw that team.");
     } finally {
       setBusy(false);
     }
@@ -708,45 +720,51 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
   const remove = async () => {
     if (!confirm(`Delete ${team.name}? This removes the team entirely, not just withdraws it.`)) return;
     setBusy(true);
+    setError(null);
     try {
       await api(`/api/teams/${team.id}`, { method: "DELETE" });
       onChanged();
+    } catch {
+      setError("Couldn't delete that team.");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className={`flex items-center justify-between gap-2 px-4 py-2.5 text-sm ${team.withdrawn ? "opacity-50" : ""}`}>
-      {editing ? (
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => void rename()}
-          onKeyDown={(e) => e.key === "Enter" && void rename()}
-          autoFocus
-          className="flex-1"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className={team.withdrawn ? "text-gray-400 line-through" : "text-gray-800 hover:text-beer-700"}
-        >
-          {team.name}
-        </button>
-      )}
-      <span className="flex items-center gap-2 text-xs">
-        <span className="text-gray-400">R{team.entryRound}</span>
-        {!team.withdrawn ? (
-          <button onClick={() => void withdraw()} disabled={busy} className="text-gray-500 hover:underline disabled:opacity-40">
-            Withdraw
+    <div className={`flex flex-col gap-1 px-4 py-2.5 ${team.withdrawn ? "opacity-50" : ""}`}>
+      <div className="flex items-center justify-between gap-2 text-sm">
+        {editing ? (
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => void rename()}
+            onKeyDown={(e) => e.key === "Enter" && void rename()}
+            autoFocus
+            className="flex-1"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className={team.withdrawn ? "text-gray-400 line-through" : "text-gray-800 hover:text-beer-700"}
+          >
+            {team.name}
           </button>
-        ) : null}
-        <button onClick={() => void remove()} disabled={busy} className="text-red-600 hover:underline disabled:opacity-40">
-          Delete
-        </button>
-      </span>
+        )}
+        <span className="flex items-center gap-2 text-xs">
+          <span className="text-gray-400">R{team.entryRound}</span>
+          {!team.withdrawn ? (
+            <button onClick={() => void withdraw()} disabled={busy} className="text-gray-500 hover:underline disabled:opacity-40">
+              Withdraw
+            </button>
+          ) : null}
+          <button onClick={() => void remove()} disabled={busy} className="text-red-600 hover:underline disabled:opacity-40">
+            Delete
+          </button>
+        </span>
+      </div>
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }

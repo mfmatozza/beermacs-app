@@ -11,7 +11,13 @@ export function LogoutButton() {
       variant="secondary"
       block
       onClick={async () => {
-        await fetch("/api/admin/auth/logout", { method: "POST" });
+        try {
+          await fetch("/api/admin/auth/logout", { method: "POST" });
+        } catch {
+          // Best-effort: the cookie is server-verified on every admin route
+          // anyway, so a failed sign-out call here just means it'll get
+          // caught on the next request rather than immediately.
+        }
         router.push("/admin/login");
         router.refresh();
       }}

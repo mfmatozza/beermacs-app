@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { api, type BoardMatch } from "../../lib/api";
 import { raw, TAB_BAR_HEIGHT } from "../../lib/theme";
 
@@ -36,6 +36,7 @@ export default function DisputesSection({
     mutationFn: (vars: { matchId: string; winnerId: string; reason: string }) =>
       api.resolveMatch(vars.matchId, { winnerId: vars.winnerId, reason: vars.reason }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["board", tournamentId] }),
+    onError: () => Alert.alert("Couldn't settle that match", "Try again in a moment."),
   });
 
   return (

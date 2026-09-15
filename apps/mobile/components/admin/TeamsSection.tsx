@@ -31,6 +31,19 @@ export default function TeamsSection({
   const withdrawMutation = useMutation({
     mutationFn: (teamId: string) => api.withdrawTeam(teamId),
     onSuccess: invalidate,
+    onError: () => Alert.alert("Couldn't withdraw that team", "Try again in a moment."),
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: (vars: { teamId: string; name: string }) => api.updateTeam(vars.teamId, { name: vars.name }),
+    onSuccess: invalidate,
+    onError: () => Alert.alert("Couldn't rename that team", "That name may already be in use."),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (teamId: string) => api.deleteTeam(teamId),
+    onSuccess: invalidate,
+    onError: () => Alert.alert("Couldn't delete that team", "Try again in a moment."),
   });
 
   const confirmWithdraw = (team: TeamRosterEntry) => {
@@ -42,6 +55,23 @@ export default function TeamsSection({
         onPress: () => withdrawMutation.mutate(team.id),
       },
     ]);
+  };
+
+  const confirmDelete = (team: TeamRosterEntry) => {
+    Alert.alert(`Delete ${team.name}?`, "This removes the team entirely, not just withdraws it.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => deleteMutation.mutate(team.id),
+      },
+    ]);
+  };
+
+  const rename = (team: TeamRosterEntry, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === team.name) return;
+    renameMutation.mutate({ teamId: team.id, name: trimmed });
   };
 
   return (
@@ -95,37 +125,96 @@ export default function TeamsSection({
         </Text>
       ) : (
         teamsQuery.data.teams.map((team) => (
-          <View
+          <TeamRow
             key={team.id}
-            className={`flex-row items-center gap-3 rounded-2xl border p-4 ${
-              team.withdrawn ? "border-stout-700 bg-stout-850/60 opacity-60" : "border-stout-600 bg-stout-750/85"
-            }`}
-          >
-            <View className="flex-1 gap-0.5">
-              <Text className="font-sans-med text-[15px] text-cream" numberOfLines={1}>
-                {team.name}
-              </Text>
-              <Text className="font-sans text-[12px] text-cream-dim">
-                Entered round {team.entryRound} · code {team.joinCode}
-                {team.withdrawn ? " · withdrawn" : ""}
-              </Text>
-            </View>
-            {!team.withdrawn ? (
-              <Pressable
-                onPress={() => confirmWithdraw(team)}
-                disabled={withdrawMutation.isPending}
-                accessibilityRole="button"
-                accessibilityLabel={`Withdraw ${team.name}`}
-                className="rounded-full border border-dispute px-3 py-1.5 active:opacity-70"
-              >
-                <Text className="font-sans-med text-[11px] uppercase tracking-[1px] text-dispute">
-                  Withdraw
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
+            team={team}
+            onRename={(name) => rename(team, name)}
+            onWithdraw={() => confirmWithdraw(team)}
+            onDelete={() => confirmDelete(team)}
+            withdrawBusy={withdrawMutation.isPending}
+            deleteBusy={deleteMutation.isPending}
+          />
         ))
       )}
     </ScrollView>
+  );
+}
+
+function TeamRow({
+  team,
+  onRename,
+  onWithdraw,
+  onDelete,
+  withdrawBusy,
+  deleteBusy,
+}: {
+  team: TeamRosterEntry;
+  onRename: (name: string) => void;
+  onWithdraw: () => void;
+  onDelete: () => void;
+  withdrawBusy: boolean;
+  deleteBusy: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(team.name);
+
+  const commit = () => {
+    setEditing(false);
+    onRename(name);
+  };
+
+  return (
+    <View
+      className={`gap-2 rounded-2xl border p-4 ${
+        team.withdrawn ? "border-stout-700 bg-stout-850/60 opacity-60" : "border-stout-600 bg-stout-750/85"
+      }`}
+    >
+      <View className="flex-row items-center gap-3">
+        <View className="flex-1 gap-0.5">
+          {editing ? (
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              onBlur={commit}
+              onSubmitEditing={commit}
+              autoFocus
+              maxLength={40}
+              accessibilityLabel="Team name"
+              className="rounded-lg border border-beer-500 bg-stout-900/70 px-2 py-1 font-sans-med text-[15px] text-cream"
+            />
+          ) : (
+            <Pressable onPress={() => setEditing(true)} accessibilityRole="button" accessibilityLabel={`Rename ${team.name}`}>
+              <Text className="font-sans-med text-[15px] text-cream" numberOfLines={1}>
+                {team.name}
+              </Text>
+            </Pressable>
+          )}
+          <Text className="font-sans text-[12px] text-cream-dim">
+            Entered round {team.entryRound} · code {team.joinCode}
+            {team.withdrawn ? " · withdrawn" : ""}
+          </Text>
+        </View>
+        {!team.withdrawn ? (
+          <Pressable
+            onPress={onWithdraw}
+            disabled={withdrawBusy}
+            accessibilityRole="button"
+            accessibilityLabel={`Withdraw ${team.name}`}
+            className="rounded-full border border-dispute px-3 py-1.5 active:opacity-70"
+          >
+            <Text className="font-sans-med text-[11px] uppercase tracking-[1px] text-dispute">Withdraw</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <Pressable
+        onPress={onDelete}
+        disabled={deleteBusy}
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${team.name}`}
+        className="self-start active:opacity-70"
+      >
+        <Text className="font-sans-med text-[11px] uppercase tracking-[1px] text-dispute/70">Delete team</Text>
+      </Pressable>
+    </View>
   );
 }

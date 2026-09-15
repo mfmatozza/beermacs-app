@@ -13,7 +13,7 @@ import { raw } from "../lib/theme";
  * pattern of pure display components fed pre-computed props.
  */
 export type NextUpState =
-  | { readonly kind: "waiting_to_be_paired" }
+  | { readonly kind: "waiting_to_be_paired"; readonly advanced: boolean }
   | { readonly kind: "waiting_for_table"; readonly opponent: string }
   | {
       readonly kind: "on_table";
@@ -71,7 +71,9 @@ function Body({ state }: { state: NextUpState }) {
     case "waiting_to_be_paired":
       return (
         <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
-          You&rsquo;re in — we&rsquo;ll pair you with an opponent the moment one is free.
+          {state.advanced
+            ? "Nice win. We’ll pair your next match the moment a table’s free."
+            : "You’re in — we’ll pair you with an opponent the moment one is free."}
         </Text>
       );
 
@@ -255,7 +257,7 @@ function pillFor(state: NextUpState): {
       };
     case "waiting_to_be_paired":
       return {
-        pillLabel: "In the round",
+        pillLabel: state.advanced ? "Advancing" : "In the round",
         pillTone: { border: "border-notice", wash: "bg-notice-wash", text: "text-notice" },
       };
     case "reported_mine":

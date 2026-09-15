@@ -61,35 +61,61 @@ function GrantPanel() {
     setError(null);
     setBusy(true);
     setSearched(true);
-    const res = await fetch(`/api/admin/access?email=${encodeURIComponent(email.trim().toLowerCase())}`);
-    const data = await res.json();
-    setFound(data.user ?? null);
-    setBusy(false);
+    try {
+      const res = await fetch(`/api/admin/access?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      if (!res.ok) {
+        setError("Couldn't look up that account.");
+        setFound(null);
+        return;
+      }
+      const data = await res.json();
+      setFound(data.user ?? null);
+    } catch {
+      setError("Couldn't reach the server. Check your connection.");
+      setFound(null);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const grant = async () => {
     if (!venueId) return;
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/admin/access", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: email.trim().toLowerCase(), venueId, role }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      setError("Couldn't grant that role.");
-      return;
+    try {
+      const res = await fetch("/api/admin/access", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), venueId, role }),
+      });
+      if (!res.ok) {
+        setError("Couldn't grant that role.");
+        return;
+      }
+      setVenueId("");
+      void search();
+    } catch {
+      setError("Couldn't reach the server. Check your connection.");
+    } finally {
+      setBusy(false);
     }
-    setVenueId("");
-    void search();
   };
 
   const revoke = async (uid: string, vid: string) => {
     setBusy(true);
-    await fetch(`/api/admin/access?userId=${uid}&venueId=${vid}`, { method: "DELETE" });
-    setBusy(false);
-    void search();
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/access?userId=${uid}&venueId=${vid}`, { method: "DELETE" });
+      if (!res.ok) {
+        setError("Couldn't revoke that role.");
+        return;
+      }
+      void search();
+    } catch {
+      setError("Couldn't reach the server. Check your connection.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

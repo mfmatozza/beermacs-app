@@ -10,7 +10,12 @@ import type { NextUpState } from "../components/NextUpCard";
  */
 export type MyNextUp =
   | { readonly kind: "match"; readonly match: BoardMatch; readonly roundIndex: number }
-  | { readonly kind: "waiting"; readonly roundIndex: number };
+  /** `advanced` distinguishes "just won a match and is waiting for the next
+   *  round to pair" from "joined and hasn't played yet" — same underlying
+   *  state (an entrant with no match in this round), but confusing to show
+   *  identical copy for both: a captain who just won reasonably reads "you're
+   *  in, we'll pair you" as "did my win not count?". */
+  | { readonly kind: "waiting"; readonly roundIndex: number; readonly advanced: boolean };
 
 export function findMyNextUp(stages: readonly BoardStage[], myTeamId: string): MyNextUp | null {
   for (const stage of stages) {
@@ -22,13 +27,23 @@ export function findMyNextUp(stages: readonly BoardStage[], myTeamId: string): M
       if (match) return { kind: "match", match, roundIndex: round.index };
     }
   }
+  const hasWonBefore = stages.some((stage) =>
+    stage.rounds.some((round) =>
+      round.matches.some(
+        (m) =>
+          m.state === "confirmed" &&
+          m.winnerTeamId === myTeamId &&
+          (m.home?.teamId === myTeamId || m.away?.teamId === myTeamId)
+      )
+    )
+  );
   for (const stage of stages) {
     for (const round of stage.rounds) {
       if (!round.entrantTeamIds.includes(myTeamId)) continue;
       const alreadyPlayed = round.matches.some(
         (m) => m.home?.teamId === myTeamId || m.away?.teamId === myTeamId
       );
-      if (!alreadyPlayed) return { kind: "waiting", roundIndex: round.index };
+      if (!alreadyPlayed) return { kind: "waiting", roundIndex: round.index, advanced: hasWonBefore };
     }
   }
   return null;
@@ -45,7 +60,7 @@ export function toNextUpState(
     onDispute: () => void;
   }
 ): NextUpState {
-  if (mine.kind === "waiting") return { kind: "waiting_to_be_paired" };
+  if (mine.kind === "waiting") return { kind: "waiting_to_be_paired", advanced: mine.advanced };
 
   const { match } = mine;
   const opponent = (match.home?.teamId === myTeamId ? match.away?.name : match.home?.name) ?? "TBD";

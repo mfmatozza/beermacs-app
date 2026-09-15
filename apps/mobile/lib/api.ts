@@ -21,6 +21,7 @@ import type {
   SetTableStateInput,
   StaffResolveInput,
   UpdateAvatarInput,
+  UpdateTeamInput,
   UpdateTournamentInput,
   WithdrawTeamInput,
 } from "@beermacs/shared";
@@ -399,8 +400,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  updateTeam: (teamId: string, body: UpdateTeamInput) =>
+    request<{ id: string; name: string }>(`/api/teams/${teamId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteTeam: (teamId: string) => request<{ id: string; deleted: boolean }>(`/api/teams/${teamId}`, { method: "DELETE" }),
   manualPair: (roundId: string, body: ManualPairInput) =>
-    request<{ matchId: string }>(`/api/rounds/${roundId}/pair`, {
+    request<{ id: string }>(`/api/rounds/${roundId}/pair`, {
       method: "POST",
       body: JSON.stringify(body),
     }),

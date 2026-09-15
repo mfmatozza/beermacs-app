@@ -996,3 +996,58 @@ produced a misleading stuck-button screenshot even though the request had
 already succeeded server-side, caught by directly querying Postgres before
 trusting it), then assigned the resulting match to Table 1 and watched it
 go `ON TABLE`. Test tournament deleted afterward.
+
+## D26.2 — Mobile UX fixes from live device testing, plus an explicit-errors audit
+
+Live testing on the simulator surfaced four real gaps in one sitting:
+
+- **Mobile admin had no way back** — `app/_layout.tsx`'s `headerShown: false`
+  (global, for the custom pour-screen/tab-bar chrome) meant the tournament
+  admin detail screen was a dead end with no visible way out except an
+  undiscoverable edge-swipe. Added an explicit back chevron.
+- **Mobile admin's Rounds tab never showed matches** — only aggregate counts
+  (`"3 matches · 1 waiting"`), never who's playing whom. Reused the same
+  public board read the player Bracket tab and `DisputesSection` already
+  poll (`api.board`) rather than adding new admin-only shape for data that's
+  already public per-tournament.
+- **Mobile admin couldn't rename or delete a team** — had add/withdraw only;
+  web already got rename/delete in D26/D26.1, mobile never did.
+- **The "waiting to be paired" card was identical whether you'd just joined
+  or just won** — a captain who wins a match and advances sees the exact
+  same "You're in — we'll pair you with an opponent" copy as someone who's
+  never played. `findMyNextUp` now tracks whether the team has a prior
+  confirmed win anywhere in the bracket; the card reads "Nice win — we'll
+  pair your next match" instead, pill relabeled "Advancing".
+
+**Explicit-errors audit** (asked directly: "check that all error messages
+are explicit and shown properly") — went through every `catch` and
+`useMutation` in both apps. Most were already fine; the real misses:
+
+- Mobile chat (`app/(tabs)/chat.tsx`): send/report/block/mute/delete had
+  **no error handling at all** — a failed action did nothing, silently.
+  Also: Report/Block were shown on the viewer's *own* messages, which would
+  have hit the server's `cannot_block_self` 422 invisibly — now hidden.
+- Mobile Home's report/confirm/dispute mutations — the three actions that
+  actually decide a match's outcome — had zero error handling. Added a
+  shared `matchActionErrorMessage()` mapping the approval state machine's
+  `kind` codes (`self_confirmation`, `wrong_state`, etc.) to specific copy.
+- Mobile admin: dispatch-now, dispute-resolve, and (my own additions from
+  D26.1) team rename/withdraw/delete were all missing `onError`.
+- Mobile admin venues list: a failed per-venue tournament fetch left that
+  venue's section silently blank forever — indistinguishable from "no
+  tournaments yet." Added a tracked per-venue error + loading state.
+- **Web admin `content/page.tsx`'s save button showed "Saved." even when
+  the PUT had failed** — no `res.ok` check at all. The worst instance found:
+  not silent, actively misleading — an admin editing landing-page copy
+  could walk away believing a change was live when it wasn't.
+- Web admin `access/page.tsx`'s `revoke()` had no error check either — a
+  failed access-revoke would silently look successful. `search()`/`grant()`
+  had no `try/catch`, so a network hiccup left the button stuck disabled
+  forever with nothing shown.
+- Web admin `TeamRow`/`RoundRow` (added in D26.1) and `create-venue-form.tsx`
+  had the same missing-catch pattern.
+
+Verified against real, live data throughout — not just typechecked: seeded
+a tournament, drove the actual report/confirm/win flow on-device, watched
+the "Advancing" copy and the accent-bordered bracket rows render correctly,
+confirmed the chat fix by sending real messages between two real accounts.

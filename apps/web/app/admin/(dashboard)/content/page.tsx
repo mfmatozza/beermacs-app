@@ -16,33 +16,49 @@ import { PageHeader } from "../../_ui/page-header";
 
 export default function ContentPage() {
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [hero, setHero] = useState<HeroContent>(DEFAULT_HERO);
   const [steps, setSteps] = useState<StepsContent>(DEFAULT_STEPS);
   const [finalCta, setFinalCta] = useState<FinalCtaContent>(DEFAULT_FINAL_CTA);
   const [savedKey, setSavedKey] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<{ key: string; message: string } | null>(null);
 
   useEffect(() => {
     void fetch("/api/admin/content")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("load_failed");
+        return r.json();
+      })
       .then((d) => {
         const content = d.content ?? {};
         if (content["landing.hero"]) setHero(content["landing.hero"]);
         if (content["landing.steps"]) setSteps(content["landing.steps"]);
         if (content["landing.finalCta"]) setFinalCta(content["landing.finalCta"]);
         setLoaded(true);
-      });
+      })
+      .catch(() => setLoadError(true));
   }, []);
 
   const save = async (key: string, value: unknown) => {
     setSavedKey(null);
-    await fetch(`/api/admin/content/${key}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ value }),
-    });
-    setSavedKey(key);
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/admin/content/${key}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value }),
+      });
+      if (!res.ok) {
+        setSaveError({ key, message: "Couldn't save — try again." });
+        return;
+      }
+      setSavedKey(key);
+    } catch {
+      setSaveError({ key, message: "Couldn't reach the server. Check your connection." });
+    }
   };
 
+  if (loadError) return <p className="text-red-600">Couldn&rsquo;t load site content. Reload the page to try again.</p>;
   if (!loaded) return <p className="text-gray-500">Loading…</p>;
 
   return (
@@ -65,7 +81,7 @@ export default function ContentPage() {
             <Field label="Body">
               <Textarea value={hero.body} onChange={(e) => setHero({ ...hero, body: e.target.value })} rows={2} />
             </Field>
-            <SaveRow onClick={() => void save("landing.hero", hero)} saved={savedKey === "landing.hero"} />
+            <SaveRow onClick={() => void save("landing.hero", hero)} saved={savedKey === "landing.hero"} error={saveError?.key === "landing.hero" ? saveError.message : null} />
           </div>
         </Card>
 
@@ -101,7 +117,7 @@ export default function ContentPage() {
                 </Field>
               </div>
             ))}
-            <SaveRow onClick={() => void save("landing.steps", steps)} saved={savedKey === "landing.steps"} />
+            <SaveRow onClick={() => void save("landing.steps", steps)} saved={savedKey === "landing.steps"} error={saveError?.key === "landing.steps" ? saveError.message : null} />
           </div>
         </Card>
 
@@ -117,7 +133,7 @@ export default function ContentPage() {
                 onChange={(e) => setFinalCta({ ...finalCta, headline: e.target.value })}
               />
             </Field>
-            <SaveRow onClick={() => void save("landing.finalCta", finalCta)} saved={savedKey === "landing.finalCta"} />
+            <SaveRow onClick={() => void save("landing.finalCta", finalCta)} saved={savedKey === "landing.finalCta"} error={saveError?.key === "landing.finalCta" ? saveError.message : null} />
           </div>
         </Card>
       </div>
@@ -125,13 +141,22 @@ export default function ContentPage() {
   );
 }
 
-function SaveRow({ onClick, saved }: { onClick: () => void; saved: boolean }) {
+function SaveRow({
+  onClick,
+  saved,
+  error,
+}: {
+  onClick: () => void;
+  saved: boolean;
+  error: string | null;
+}) {
   return (
     <div className="flex items-center gap-3">
       <Button type="button" onClick={onClick}>
         Save
       </Button>
       {saved ? <span className="text-sm text-green-600">Saved.</span> : null}
+      {error ? <span className="text-sm text-red-600">{error}</span> : null}
     </div>
   );
 }

@@ -19,20 +19,25 @@ export function CreateVenueForm() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/admin/venues", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, city: city || undefined }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      setError("Couldn't create that venue.");
-      return;
+    try {
+      const res = await fetch("/api/admin/venues", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, city: city || undefined }),
+      });
+      if (!res.ok) {
+        setError("Couldn't create that venue.");
+        return;
+      }
+      setName("");
+      setCity("");
+      setOpen(false);
+      router.refresh();
+    } catch {
+      setError("Couldn't reach the server. Check your connection.");
+    } finally {
+      setBusy(false);
     }
-    setName("");
-    setCity("");
-    setOpen(false);
-    router.refresh();
   };
 
   if (!open) {

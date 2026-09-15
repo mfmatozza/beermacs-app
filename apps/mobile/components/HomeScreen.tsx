@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { isCompleteJoinCode, joinCodeLength, normaliseJoinCode } from "@beermacs/shared";
-import { type MeResponse, api } from "../lib/api";
+import { ApiError, type MeResponse, api } from "../lib/api";
 import { usePendingTournamentStore } from "../lib/pending-tournament";
 import { raw, TAB_BAR_HEIGHT } from "../lib/theme";
 import { findMyNextUp, toNextUpState } from "../lib/next-up";
@@ -25,6 +25,25 @@ import NextUpCard from "./NextUpCard";
  * on the Bracket tab in detail but gets its own summary card here so a player
  * never has to leave Home to see whether they're up.
  */
+/** Report/confirm/dispute all fail with the same `kind` strings the shared
+ *  approval state machine returns (packages/shared/src/approval.ts) — one
+ *  mapping for all three rather than three near-identical switch statements. */
+function matchActionErrorMessage(e: unknown): string {
+  if (!(e instanceof ApiError)) return "Check your connection and try again.";
+  switch (e.code) {
+    case "self_confirmation":
+      return "You can't confirm your own report — the other team needs to.";
+    case "wrong_state":
+      return "This match has already moved on. Pull to refresh and try again.";
+    case "tournament_ended":
+      return "This tournament has already ended.";
+    case "implausible_score":
+      return "That score doesn't add up for this format.";
+    default:
+      return "Try again in a moment.";
+  }
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { myTeam, me, isLoading: meLoading } = useCurrentTeam();
@@ -202,7 +221,9 @@ function TeamSetupHome({
           {pending.tournamentName}
         </Text>
         <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
-          One step left — form your team, or join one a teammate already started.
+          One step left. Whoever creates the team gets a new code below to
+          text the rest of the table — that's separate from the one you just
+          typed, so keep it handy after you create.
         </Text>
       </View>
 
@@ -331,14 +352,17 @@ function ActiveTournamentHome({
     mutationFn: (vars: { matchId: string; winnerId: string }) =>
       api.reportMatch(vars.matchId, { winnerId: vars.winnerId }),
     onSuccess: invalidateBoard,
+    onError: (e) => Alert.alert("Couldn't report the score", matchActionErrorMessage(e)),
   });
   const confirmMutation = useMutation({
     mutationFn: (matchId: string) => api.confirmMatch(matchId),
     onSuccess: invalidateBoard,
+    onError: (e) => Alert.alert("Couldn't confirm", matchActionErrorMessage(e)),
   });
   const rejectMutation = useMutation({
     mutationFn: (matchId: string) => api.rejectMatch(matchId, {}),
     onSuccess: invalidateBoard,
+    onError: (e) => Alert.alert("Couldn't dispute", matchActionErrorMessage(e)),
   });
 
   const mine = useMemo(() => {

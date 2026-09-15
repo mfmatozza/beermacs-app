@@ -1,6 +1,14 @@
-import { useCallback, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Switch, Text, View } from "react-native";
-import { ApiError, api, type RoundSummary, type StageSummary, type TournamentDetail } from "../../lib/api";
+import {
+  ApiError,
+  api,
+  type BoardMatch,
+  type RoundSummary,
+  type StageSummary,
+  type TournamentDetail,
+} from "../../lib/api";
 import { raw, TAB_BAR_HEIGHT } from "../../lib/theme";
 
 /**
@@ -26,6 +34,23 @@ export default function RoundsSection({
 }) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // The counts alone (matchCount/waitingCount) don't say WHO is playing whom
+  // — reusing the same public board read the player Bracket tab and
+  // DisputesSection already poll, rather than adding a second admin-only
+  // shape for data that's already public per-tournament.
+  const boardQuery = useQuery({
+    queryKey: ["board", detail.id],
+    queryFn: () => api.board(detail.id),
+    refetchInterval: 5000,
+  });
+  const matchesByRoundId = useMemo(() => {
+    const map = new Map<string, readonly BoardMatch[]>();
+    for (const stage of boardQuery.data?.stages ?? []) {
+      for (const round of stage.rounds) map.set(round.id, round.matches);
+    }
+    return map;
+  }, [boardQuery.data]);
 
   const openRound = useCallback(
     async (stage: StageSummary, index: number) => {
@@ -104,6 +129,7 @@ export default function RoundsSection({
             <RoundCard
               key={round.id}
               round={round}
+              matches={matchesByRoundId.get(round.id) ?? []}
               busy={busyKey === round.id}
               repechageBusy={busyKey === `repechage:${round.id}`}
               onOpen={() => void openRound(stage, round.index)}
@@ -134,6 +160,7 @@ export default function RoundsSection({
 
 function RoundCard({
   round,
+  matches,
   busy,
   repechageBusy,
   onOpen,
@@ -141,6 +168,7 @@ function RoundCard({
   onRepechage,
 }: {
   round: RoundSummary;
+  matches: readonly BoardMatch[];
   busy: boolean;
   repechageBusy: boolean;
   onOpen: () => void;
@@ -175,6 +203,14 @@ function RoundCard({
       <Text className="font-sans text-[13px] text-cream-dim">
         {`${round.matchCount} match${round.matchCount === 1 ? "" : "es"} · ${round.waitingCount} waiting for a table`}
       </Text>
+
+      {matches.length > 0 ? (
+        <View className="gap-1.5 rounded-xl bg-stout-850/70 p-2">
+          {matches.map((m) => (
+            <AdminMatchRow key={m.id} match={m} />
+          ))}
+        </View>
+      ) : null}
 
       {open ? (
         <>
@@ -215,6 +251,49 @@ function RoundCard({
           </Text>
         </Pressable>
       )}
+    </View>
+  );
+}
+
+const MATCH_STATE_LABEL: Record<BoardMatch["state"], string> = {
+  scheduled: "Not paired",
+  queued: "Queued",
+  on_table: "Live",
+  reported: "Reported",
+  disputed: "Disputed",
+  confirmed: "Final",
+};
+
+const MATCH_STATE_TONE: Record<BoardMatch["state"], string> = {
+  scheduled: "text-notice",
+  queued: "text-notice",
+  on_table: "text-live",
+  reported: "text-notice",
+  disputed: "text-dispute",
+  confirmed: "text-cream-faint",
+};
+
+function AdminMatchRow({ match }: { match: BoardMatch }) {
+  return (
+    <View className="flex-row items-center gap-3 px-1.5 py-1">
+      <View className="flex-1 gap-0.5">
+        <Text numberOfLines={1} className="font-sans-med text-[13px] text-cream">
+          {match.home?.name ?? "TBD"}
+        </Text>
+        <Text numberOfLines={1} className="font-sans-med text-[13px] text-cream">
+          {match.away?.name ?? "TBD"}
+        </Text>
+      </View>
+      <View className="items-end gap-0.5">
+        <Text className={`font-sans-med text-[11px] uppercase tracking-[1px] ${MATCH_STATE_TONE[match.state]}`}>
+          {MATCH_STATE_LABEL[match.state]}
+        </Text>
+        {match.tableLabel ? (
+          <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-beer-400">
+            {match.tableLabel}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }

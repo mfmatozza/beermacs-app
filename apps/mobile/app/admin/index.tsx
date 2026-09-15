@@ -19,6 +19,7 @@ export default function AdminVenuesScreen() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tournaments, setTournaments] = useState<Record<string, readonly TournamentListItem[]>>({});
+  const [tournamentErrors, setTournamentErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -29,11 +30,16 @@ export default function AdminVenuesScreen() {
         setMe(r);
         const venues = r.memberships.filter((m) => CAN_ADMIN.has(m.role));
         for (const m of venues) {
-          void api.listTournaments(m.venue.id).then((res) => {
-            if (!cancelled) {
-              setTournaments((prev) => ({ ...prev, [m.venue.id]: res.tournaments }));
-            }
-          });
+          void api
+            .listTournaments(m.venue.id)
+            .then((res) => {
+              if (!cancelled) {
+                setTournaments((prev) => ({ ...prev, [m.venue.id]: res.tournaments }));
+              }
+            })
+            .catch(() => {
+              if (!cancelled) setTournamentErrors((prev) => ({ ...prev, [m.venue.id]: true }));
+            });
         }
       })
       .catch(() => {
@@ -121,10 +127,16 @@ export default function AdminVenuesScreen() {
               </Pressable>
             ))}
 
-            {tournaments[m.venue.id]?.length === 0 ? (
+            {tournamentErrors[m.venue.id] ? (
+              <Text className="font-sans text-[13px] text-dispute">
+                Couldn&rsquo;t load tournaments for this venue. Pull to retry.
+              </Text>
+            ) : tournaments[m.venue.id]?.length === 0 ? (
               <Text className="font-sans text-[13px] text-cream-dim">
                 No tournaments yet — tap New to create one.
               </Text>
+            ) : tournaments[m.venue.id] === undefined ? (
+              <ActivityIndicator size="small" color={raw.beer} />
             ) : null}
           </View>
         ))}

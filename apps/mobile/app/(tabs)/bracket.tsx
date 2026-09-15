@@ -174,12 +174,23 @@ function isMine(match: BoardMatch, myTeamId: string | null): boolean {
   return myTeamId !== null && (match.home?.teamId === myTeamId || match.away?.teamId === myTeamId);
 }
 
+const ROW_BORDER_TONE: Record<BoardMatch["state"], string> = {
+  scheduled: "border-l-stout-600",
+  queued: "border-l-stout-600",
+  on_table: "border-l-live",
+  reported: "border-l-notice",
+  disputed: "border-l-dispute",
+  confirmed: "border-l-stout-600",
+};
+
 function MatchRow({ match, mine }: { match: BoardMatch; mine: boolean }) {
   return (
     <View
-      className={`flex-row items-center gap-3 rounded-xl px-2 py-2 ${mine ? "bg-beer-500/10" : ""}`}
+      className={`flex-row items-center gap-3 rounded-xl border-l-[3px] py-2 pl-2.5 pr-2 ${ROW_BORDER_TONE[match.state]} ${
+        mine ? "bg-beer-500/10" : ""
+      }`}
     >
-      <View className="flex-1 gap-0.5">
+      <View className="flex-1 gap-1">
         <TeamLine
           name={match.home?.name ?? "TBD"}
           viaRepechage={match.home?.viaRepechage ?? false}
@@ -213,13 +224,16 @@ function TeamLine({
   isWinner: boolean;
 }) {
   return (
-    <Text
-      numberOfLines={1}
-      className={`font-sans-med text-[15px] ${isWinner ? "text-cream" : "text-cream-dim"}`}
-    >
-      {name}
-      {viaRepechage ? " 🍀" : ""}
-    </Text>
+    <View className="flex-row items-center gap-1.5">
+      {isWinner ? <Text className="font-sans-bold text-[13px] text-live">✓</Text> : null}
+      <Text
+        numberOfLines={1}
+        className={`flex-1 font-sans-med text-[15px] ${isWinner ? "text-cream" : "text-cream-dim"}`}
+      >
+        {name}
+        {viaRepechage ? " 🍀" : ""}
+      </Text>
+    </View>
   );
 }
 

@@ -61,6 +61,7 @@ export default function TablesSection({
   const dispatchMutation = useMutation({
     mutationFn: () => api.runDispatch(detail.venueId),
     onSuccess: () => void reload(),
+    onError: () => setError("Couldn't run dispatch. Try again."),
   });
 
   return (

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { api, type ChatMessage } from "../../lib/api";
+import { ApiError, api, type ChatMessage } from "../../lib/api";
 import { raw, TAB_BAR_HEIGHT } from "../../lib/theme";
 import { useCurrentTeam } from "../../lib/use-current-team";
 
@@ -91,22 +92,33 @@ export default function ChatTab() {
       setDraft("");
       void queryClient.invalidateQueries({ queryKey: ["chat"] });
     },
+    onError: (e) =>
+      Alert.alert(
+        "Couldn't send",
+        e instanceof ApiError && e.code === "muted"
+          ? "A staff member has muted you in this tournament."
+          : "Check your connection and try again."
+      ),
   });
 
   const reportMutation = useMutation({
     mutationFn: (messageId: string) => api.reportMessage(messageId),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["chat"] }),
+    onError: () => Alert.alert("Couldn't report", "Try again in a moment."),
   });
   const blockMutation = useMutation({
     mutationFn: (userId: string) => api.blockUser(userId),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["chat"] }),
+    onError: () => Alert.alert("Couldn't block", "Try again in a moment."),
   });
   const muteMutation = useMutation({
     mutationFn: (userId: string) => api.muteInTournament(tournamentId!, userId),
+    onError: () => Alert.alert("Couldn't mute", "Try again in a moment."),
   });
   const deleteMutation = useMutation({
     mutationFn: (messageId: string) => api.deleteChatMessage(messageId),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["chat"] }),
+    onError: () => Alert.alert("Couldn't delete", "Try again in a moment."),
   });
 
   const activeQuery =
@@ -173,6 +185,7 @@ export default function ChatTab() {
                   key={m.id}
                   message={m}
                   isStaff={isStaff}
+                  isMine={m.authorId !== null && m.authorId === me?.user.id}
                   onReport={() => reportMutation.mutate(m.id)}
                   onBlock={() => m.authorId && blockMutation.mutate(m.authorId)}
                   onMute={() => m.authorId && muteMutation.mutate(m.authorId)}
@@ -251,6 +264,7 @@ function TabButton({
 function MessageRow({
   message,
   isStaff,
+  isMine,
   onReport,
   onBlock,
   onMute,
@@ -258,6 +272,7 @@ function MessageRow({
 }: {
   message: ChatMessage;
   isStaff: boolean;
+  isMine: boolean;
   onReport: () => void;
   onBlock: () => void;
   onMute: () => void;
@@ -282,29 +297,35 @@ function MessageRow({
         ) : null}
       </View>
       <Text className="font-sans text-[14px] leading-[20px] text-cream">{message.body}</Text>
-      {message.authorId ? (
+      {message.authorId && (!isMine || isStaff) ? (
         <View className="mt-1 flex-row gap-4">
-          <Pressable
-            onPress={onReport}
-            accessibilityRole="button"
-            accessibilityLabel="Report message"
-          >
-            <Text className="font-sans-med text-[11px] uppercase tracking-[0.6px] text-cream-faint">
-              {message.flaggedAt ? "Reported" : "Report"}
-            </Text>
-          </Pressable>
-          <Pressable onPress={onBlock} accessibilityRole="button" accessibilityLabel="Block user">
-            <Text className="font-sans-med text-[11px] uppercase tracking-[0.6px] text-cream-faint">
-              Block
-            </Text>
-          </Pressable>
-          {isStaff ? (
+          {!isMine ? (
             <>
-              <Pressable onPress={onMute} accessibilityRole="button" accessibilityLabel="Mute user">
-                <Text className="font-sans-med text-[11px] uppercase tracking-[0.6px] text-notice">
-                  Mute
+              <Pressable
+                onPress={onReport}
+                accessibilityRole="button"
+                accessibilityLabel="Report message"
+              >
+                <Text className="font-sans-med text-[11px] uppercase tracking-[0.6px] text-cream-faint">
+                  {message.flaggedAt ? "Reported" : "Report"}
                 </Text>
               </Pressable>
+              <Pressable onPress={onBlock} accessibilityRole="button" accessibilityLabel="Block user">
+                <Text className="font-sans-med text-[11px] uppercase tracking-[0.6px] text-cream-faint">
+                  Block
+                </Text>
+              </Pressable>
+            </>
+          ) : null}
+          {isStaff ? (
+            <>
+              {!isMine ? (
+                <Pressable onPress={onMute} accessibilityRole="button" accessibilityLabel="Mute user">
+                  <Text className="font-sans-med text-[11px] uppercase tracking-[0.6px] text-notice">
+                    Mute
+                  </Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={onDelete}
                 accessibilityRole="button"
