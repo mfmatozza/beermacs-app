@@ -6,8 +6,12 @@ const APP_ENV = (process.env.APP_ENV ?? "development") as "development" | "stagi
 const API_URL: Record<typeof APP_ENV, string> = {
   // Dev points at localhost so the app talks to a locally-run apps/web.
   development: process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000",
-  staging: "https://beermacs-app.vercel.app",
-  production: "https://beermacs-app.vercel.app",
+  // The .vercel.app domain still works (Vercel keeps it live alongside any
+  // custom domain) — switched to app.beermacs.com now that it's verified
+  // and serving, since a build's API_URL is baked in at build time and
+  // can't be changed without cutting a new one.
+  staging: "https://app.beermacs.com",
+  production: "https://app.beermacs.com",
 };
 
 const config: ExpoConfig = {
