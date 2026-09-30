@@ -29,7 +29,7 @@ const JOIN_CODE = "BEERPG";
 async function upsertUser(email: string, displayName: string, password?: string) {
   const user = await prisma.user.upsert({
     where: { email },
-    update: { displayName, name: displayName, bannedAt: null, deletedAt: null },
+    update: { displayName, name: displayName, phone: null, bannedAt: null, deletedAt: null },
     create: { email, displayName, name: displayName, emailVerified: true },
   });
   if (password) {
