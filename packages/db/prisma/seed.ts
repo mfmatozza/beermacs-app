@@ -91,7 +91,10 @@ async function main() {
 
   // Rebuild the tournament from scratch each run — simpler and more reliable
   // than diffing whatever state a reviewer left it in. Cascades clean up.
-  await prisma.tournament.deleteMany({ where: { joinCode: JOIN_CODE } });
+  // Also the hand-made demo from before this seed existed (same name/venue).
+  await prisma.tournament.deleteMany({
+    where: { OR: [{ joinCode: JOIN_CODE }, { venueId: venue.id, name: "Porter House Open" }] },
+  });
   // The demo accounts only ever belong to this tournament: drop any team they
   // were put on by hand (the pre-seed demo) so the app shows exactly one.
   await prisma.teamMember.deleteMany({
