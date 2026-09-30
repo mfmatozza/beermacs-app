@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdminPage } from "@/lib/admin-session";
 import { prisma } from "@beermacs/db";
 import { Badge } from "../_ui/badge";
 import { Card, StatCard } from "../_ui/card";
@@ -55,6 +56,7 @@ const SECTIONS = [
 ] as const;
 
 export default async function AdminHomePage() {
+  await requireAdminPage();
   const [venues, users, tournaments, runningNow, matchesToday, openSupport] = await Promise.all([
     prisma.venue.count({ where: { deletedAt: null } }),
     prisma.user.count({ where: { deletedAt: null } }),

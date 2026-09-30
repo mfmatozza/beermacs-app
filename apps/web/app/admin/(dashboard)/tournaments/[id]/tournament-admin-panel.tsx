@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { api, errorText } from "../../../_ui/api";
 import { Badge } from "../../../_ui/badge";
 import { Button } from "../../../_ui/button";
 import { Card, StatCard } from "../../../_ui/card";
@@ -29,18 +30,6 @@ const MATCH_STATE_TONE: Record<string, "neutral" | "live" | "dispute"> = {
   ON_TABLE: "live",
 };
 
-async function api(path: string, init?: RequestInit) {
-  const res = await fetch(path, {
-    ...init,
-    headers: { "content-type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `http_${res.status}`);
-  }
-  return res.json().catch(() => ({}));
-}
-
 export function TournamentAdminPanel({ tournament: t }: { tournament: TournamentAdminData }) {
   const router = useRouter();
   const refresh = () => router.refresh();
@@ -56,13 +45,27 @@ export function TournamentAdminPanel({ tournament: t }: { tournament: Tournament
   };
 
   const endTournament = async () => {
+    if (!confirm(`End "${t.name}"? Scheduling stops and results lock. You can reopen it later.`)) return;
     setBusy(true);
     setError(null);
     try {
       await api(`/api/tournaments/${t.id}/end`, { method: "POST" });
       refresh();
-    } catch {
-      setError("Couldn't end the tournament.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't end the tournament."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reopenTournament = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/tournaments/${t.id}/reopen`, { method: "POST" });
+      refresh();
+    } catch (e) {
+      setError(errorText(e, "Couldn't reopen the tournament."));
     } finally {
       setBusy(false);
     }
@@ -75,8 +78,8 @@ export function TournamentAdminPanel({ tournament: t }: { tournament: Tournament
     try {
       await api(`/api/tournaments/${t.id}`, { method: "DELETE" });
       router.push("/admin/tournaments");
-    } catch {
-      setError("Couldn't delete the tournament.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't delete the tournament."));
       setBusy(false);
     }
   };
@@ -103,7 +106,11 @@ export function TournamentAdminPanel({ tournament: t }: { tournament: Tournament
               <Button variant="secondary" onClick={() => void endTournament()} disabled={busy}>
                 End
               </Button>
-            ) : null}
+            ) : (
+              <Button variant="secondary" onClick={() => void reopenTournament()} disabled={busy}>
+                Reopen
+              </Button>
+            )}
             <Button variant="danger" onClick={() => void deleteTournament()} disabled={busy}>
               Delete
             </Button>
@@ -137,6 +144,7 @@ export function TournamentAdminPanel({ tournament: t }: { tournament: Tournament
         </div>
         <div className="flex flex-col gap-4">
           <TeamsPanel tournamentId={t.id} teams={t.teams} onChanged={refresh} />
+          <AuditLog entries={t.auditEntries} />
         </div>
       </div>
     </>
@@ -184,8 +192,8 @@ function SettingsPanel({
         }),
       });
       onSaved();
-    } catch {
-      setError("Couldn't save those settings.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't save those settings."));
     } finally {
       setBusy(false);
     }
@@ -260,8 +268,8 @@ function StageCard({
     try {
       await api(`/api/stages/${stage.id}/rounds/${index}/open`, { method: "POST" });
       onChanged();
-    } catch {
-      setError("Couldn't open that round.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't open that round."));
     } finally {
       setBusy(false);
     }
@@ -340,8 +348,8 @@ function RoundRow({
         body: JSON.stringify({ paused: !round.schedulingPaused }),
       });
       onChanged();
-    } catch {
-      setError("Couldn't change scheduling for that round.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't change scheduling for that round."));
     } finally {
       setBusy(false);
     }
@@ -422,8 +430,8 @@ function ManualPairForm({
       setAwayTeamId("");
       setOpen(false);
       onChanged();
-    } catch {
-      setError("Couldn't pair those teams — one may already be on a match.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't pair those teams — one may already be on a match."));
     } finally {
       setBusy(false);
     }
@@ -518,8 +526,8 @@ function MatchRow({
       setAssigning(false);
       setTableId("");
       onChanged();
-    } catch {
-      setError("Couldn't assign that table.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't assign that table."));
     } finally {
       setBusy(false);
     }
@@ -527,6 +535,11 @@ function MatchRow({
 
   const resolve = async () => {
     if (!winnerId || !reason.trim()) return;
+    if (
+      match.state === "CONFIRMED" &&
+      !confirm("Overwrite a confirmed result? The old winner is pulled back out of the next round.")
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -535,8 +548,8 @@ function MatchRow({
         body: JSON.stringify({ winnerId, reason: reason.trim() }),
       });
       onChanged();
-    } catch {
-      setError("Couldn't settle that match.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't settle that match."));
     } finally {
       setBusy(false);
     }
@@ -548,6 +561,7 @@ function MatchRow({
         <span className="text-gray-700">
           {match.homeTeam?.name ?? "TBD"} <span className="text-gray-400">vs</span>{" "}
           {match.awayTeam?.name ?? "TBD"}
+          {match.winner ? <span className="ml-1.5 text-gray-400">· {match.winner.name} won</span> : null}
         </span>
         <span className="flex items-center gap-2">
           {match.venueTable ? <span className="text-gray-400">{match.venueTable.label}</span> : null}
@@ -561,13 +575,13 @@ function MatchRow({
               {assigning ? "Cancel" : "Assign table"}
             </button>
           ) : null}
-          {match.state === "DISPUTED" && !tournamentEnded ? (
+          {match.homeTeam && match.awayTeam ? (
             <button
               type="button"
               onClick={() => setResolving((v) => !v)}
-              className="font-medium text-beer-700 hover:underline"
+              className="py-1 font-medium text-beer-700 hover:underline"
             >
-              {resolving ? "Cancel" : "Settle"}
+              {resolving ? "Cancel" : match.state === "CONFIRMED" ? "Correct result" : "Settle"}
             </button>
           ) : null}
         </span>
@@ -651,8 +665,8 @@ function TeamsPanel({
       });
       setName("");
       onChanged();
-    } catch {
-      setError("Couldn't add that team.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't add that team."));
     } finally {
       setBusy(false);
     }
@@ -696,8 +710,8 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
     try {
       await api(`/api/teams/${team.id}`, { method: "PATCH", body: JSON.stringify({ name: name.trim() }) });
       onChanged();
-    } catch {
-      setError("Couldn't rename — that name may already be in use.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't rename — that name may already be in use."));
     } finally {
       setBusy(false);
       setEditing(false);
@@ -705,13 +719,17 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
   };
 
   const withdraw = async () => {
+    if (!team.withdrawn && !confirm(`Withdraw ${team.name}? It stays in the bracket history.`)) return;
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/teams/${team.id}/withdraw`, { method: "POST", body: JSON.stringify({}) });
+      await api(`/api/teams/${team.id}/withdraw`, {
+        method: team.withdrawn ? "DELETE" : "POST",
+        body: team.withdrawn ? undefined : JSON.stringify({}),
+      });
       onChanged();
-    } catch {
-      setError("Couldn't withdraw that team.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't withdraw that team."));
     } finally {
       setBusy(false);
     }
@@ -724,8 +742,8 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
     try {
       await api(`/api/teams/${team.id}`, { method: "DELETE" });
       onChanged();
-    } catch {
-      setError("Couldn't delete that team.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't delete that team."));
     } finally {
       setBusy(false);
     }
@@ -747,6 +765,8 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
           <button
             type="button"
             onClick={() => setEditing(true)}
+            title="Rename"
+            aria-label={`Rename ${team.name}`}
             className={team.withdrawn ? "text-gray-400 line-through" : "text-gray-800 hover:text-beer-700"}
           >
             {team.name}
@@ -754,17 +774,48 @@ function TeamRow({ team, onChanged }: { team: Team; onChanged: () => void }) {
         )}
         <span className="flex items-center gap-2 text-xs">
           <span className="text-gray-400">R{team.entryRound}</span>
-          {!team.withdrawn ? (
-            <button onClick={() => void withdraw()} disabled={busy} className="text-gray-500 hover:underline disabled:opacity-40">
-              Withdraw
-            </button>
-          ) : null}
-          <button onClick={() => void remove()} disabled={busy} className="text-red-600 hover:underline disabled:opacity-40">
+          <button onClick={() => void withdraw()} disabled={busy} className="py-1 text-gray-500 hover:underline disabled:opacity-40">
+            {team.withdrawn ? "Reinstate" : "Withdraw"}
+          </button>
+          <button onClick={() => void remove()} disabled={busy} className="py-1 text-red-600 hover:underline disabled:opacity-40">
             Delete
           </button>
         </span>
       </div>
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
+  );
+}
+
+// ── Audit log ────────────────────────────────────────────────────────────
+
+const auditFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function AuditLog({ entries }: { entries: TournamentAdminData["auditEntries"] }) {
+  return (
+    <>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Audit log</h2>
+      <Card className="p-0">
+        {entries.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-gray-400">No staff actions yet.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100 text-xs">
+            {entries.map((a) => (
+              <li key={a.id} className="px-4 py-2.5">
+                <span className="font-medium text-gray-800">{a.action}</span>
+                <span className="text-gray-500"> · {a.actor?.displayName ?? "deleted user"}</span>
+                <span className="float-right text-gray-400">{auditFmt.format(a.createdAt)}</span>
+                {a.reason ? <p className="mt-0.5 text-gray-500">{a.reason}</p> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </>
   );
 }

@@ -3,6 +3,7 @@
 // lib/session.ts) plus the API route guard, which DOES need HttpError from
 // session.ts.
 
+import { redirect } from "next/navigation";
 import { isAdminSession } from "./admin-cookie";
 import { HttpError } from "./session";
 
@@ -17,4 +18,11 @@ export {
  *  so these routes read the same as every other guarded route in this app. */
 export async function requireAdminApi(): Promise<void> {
   if (!(await isAdminSession())) throw new HttpError(401, "not_admin");
+}
+
+/** Guard for every /admin page. The (dashboard) layout checks too, but a
+ *  layout check alone can be skipped by a client-side request for just the
+ *  page segment — each page that reads data re-checks. */
+export async function requireAdminPage(): Promise<void> {
+  if (!(await isAdminSession())) redirect("/admin/login");
 }

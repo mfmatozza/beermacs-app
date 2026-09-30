@@ -58,15 +58,10 @@ describe("registerInput", () => {
     );
   });
 
-  it("rejects a missing phone — mandatory per G-1", () => {
-    assert.throws(() =>
-      registerInput.parse({
-        email: "a@b.com",
-        password: "pour-me-a-pint",
-        displayName: "A",
-        phone: "",
-      })
-    );
+  it("accepts a missing or blank phone — optional (App Review 5.1.1)", () => {
+    const base = { email: "a@b.com", password: "pour-me-a-pint", displayName: "A" };
+    assert.strictEqual(registerInput.parse(base).phone, undefined);
+    assert.strictEqual(registerInput.parse({ ...base, phone: "  " }).phone, undefined);
   });
 
   it("rejects an invalid email", () => {

@@ -89,7 +89,9 @@ export async function listChannelMessages(
   const [rows, blocked] = await Promise.all([
     prisma.chatMessage.findMany({
       where: { channelId, deletedAt: null },
-      orderBy: { createdAt: "asc" },
+      // Newest `limit`, flipped back to oldest-first below. Ascending + take
+      // returned the FIRST 100 forever, so message 101 never showed up.
+      orderBy: { createdAt: "desc" },
       take: limit,
       select: {
         id: true,
@@ -107,7 +109,7 @@ export async function listChannelMessages(
   ]);
   const blockedIds = new Set(blocked.map((b) => b.blockedUserId));
 
-  return rows.map((m) => ({
+  return rows.reverse().map((m) => ({
     id: m.id,
     authorId: m.authorId,
     authorName:

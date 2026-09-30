@@ -1,4 +1,5 @@
 import { Prisma, prisma } from "@beermacs/db";
+import { requireAdminPage } from "@/lib/admin-session";
 import { PageHeader } from "../../_ui/page-header";
 import { SupportInbox } from "./support-inbox";
 
@@ -27,9 +28,12 @@ export type SupportMessageData = Prisma.SupportMessageGetPayload<{ select: typeo
  * same as Access and Site content.
  */
 export default async function SupportPage() {
+  await requireAdminPage();
   const messages = await prisma.supportMessage.findMany({
     orderBy: [{ resolvedAt: { sort: "asc", nulls: "first" } }, { createdAt: "desc" }],
     select: MESSAGE_SELECT,
+    // Open ones sort first, so a cap only ever hides old resolved threads.
+    take: 300,
   });
 
   return (

@@ -44,3 +44,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ teamId:
     return handleError(e);
   }
 }
+
+/** DELETE — undo a withdrawal (a mis-tap, or the team came back). */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ teamId: string }> }) {
+  try {
+    const { teamId } = await params;
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      select: { tournamentId: true, tournament: { select: { venueId: true } } },
+    });
+    if (!team) throw new HttpError(404, "team_not_found");
+    const viewer = await requireVenueRoleOrAdmin(team.tournament.venueId, Role.VENUE_STAFF);
+
+    await prisma.$transaction([
+      prisma.team.update({ where: { id: teamId }, data: { withdrawn: false } }),
+      prisma.auditEntry.create({
+        data: { tournamentId: team.tournamentId, actorUserId: viewer.userId, action: "team.reinstate" },
+      }),
+    ]);
+    return NextResponse.json({ id: teamId, withdrawn: false });
+  } catch (e) {
+    return handleError(e);
+  }
+}

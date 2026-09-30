@@ -42,12 +42,24 @@ export async function DELETE(
     const { teamId } = await params;
     const team = await prisma.team.findUnique({
       where: { id: teamId },
-      select: { tournament: { select: { venueId: true } } },
+      select: { name: true, tournamentId: true, tournament: { select: { venueId: true } } },
     });
     if (!team) throw new HttpError(404, "team_not_found");
-    await requireVenueRoleOrAdmin(team.tournament.venueId, Role.VENUE_STAFF);
+    // VENUE_ADMIN, not STAFF: this cascades away the team's reports and
+    // memberships. Night-of staff have withdraw for "they left".
+    const viewer = await requireVenueRoleOrAdmin(team.tournament.venueId, Role.VENUE_ADMIN);
 
-    await prisma.team.delete({ where: { id: teamId } });
+    await prisma.$transaction([
+      prisma.team.delete({ where: { id: teamId } }),
+      prisma.auditEntry.create({
+        data: {
+          tournamentId: team.tournamentId,
+          actorUserId: viewer.userId,
+          action: "team.delete",
+          before: { name: team.name },
+        },
+      }),
+    ]);
     return NextResponse.json({ id: teamId, deleted: true });
   } catch (e) {
     return handleError(e);

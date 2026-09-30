@@ -60,10 +60,9 @@ model User {
   emailVerified Boolean   @default(false)
   image         String?
 
-  /// Nullable: players join anonymously and may never give us contact details.
-  /// Auth identifiers are added only if they want their record to follow them
-  /// between nights.
-  phone         String?  @unique
+  /// Optional contact data (App Review 5.1.1(v) rejected build 11 for
+  /// requiring it). Not unique: people share phones, and it's never a login.
+  phone         String?
   phoneVerified Boolean  @default(false)
   /// Defaulted, not required: an anonymous session is created the moment the
   /// app opens, before the player has typed anything. The join endpoint
@@ -78,6 +77,9 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+  /// Platform-admin ban. Set = every session is refused (lib/session.ts) and
+  /// sign-in is blocked (lib/auth.ts). Cleared to unban.
+  bannedAt  DateTime?
 
   sessions      Session[]
   accounts      Account[]
@@ -149,6 +151,24 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
+}
+
+/// Better Auth's rate-limit counters (`rateLimit.storage: "database"`). The
+/// in-memory default is per serverless instance, i.e. no limit on Vercel.
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+}
+
+/// Failed platform-admin logins per IP. At 10 failures the IP is locked until
+/// the admin unlocks it from /admin/security (or it ages out after a day).
+model AdminLoginLock {
+  ip        String    @id
+  failures  Int       @default(0)
+  lockedAt  DateTime?
+  updatedAt DateTime  @updatedAt
 }
 
 // ─── Tenancy ────────────────────────────────────────────────────────────────
@@ -523,6 +543,8 @@ model Match {
   @@unique([roundId, position])
   @@index([tournamentId, state])
   @@index([venueTableId])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
 }
 
 enum ReportKind {
@@ -563,6 +585,7 @@ model MatchReport {
   team  Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   @@index([matchId, createdAt])
+  @@index([actorUserId])
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────────
@@ -677,6 +700,7 @@ model ChatMessage {
   author  User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([channelId, createdAt])
+  @@index([authorId])
 }
 
 /// A player hiding another player's messages from themselves (App Store
@@ -730,6 +754,9 @@ enum SupportSource {
   /// time (not a live FK-only reference), so the backoffice still has full
   /// contact details if the account is later deleted.
   MOBILE
+  /// A chat message a player reported (guideline 1.2) — copied here so the
+  /// platform admin sees it, not only the venue.
+  CHAT_REPORT
 }
 
 /// One shared inbox for both entry points (guideline 1.2 also wants "a
@@ -749,6 +776,7 @@ model SupportMessage {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([resolvedAt, createdAt])
+  @@index([userId])
 }
 
 // ─── Push ───────────────────────────────────────────────────────────────────

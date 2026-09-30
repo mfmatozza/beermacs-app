@@ -6,12 +6,10 @@
 
 import type {
   AdminAddTeamInput,
-  AssignTableInput,
   CreateTeamInput,
   CreateTournamentInput,
   JoinTeamInput,
   JoinTournamentInput,
-  ManualPairInput,
   PushPreferencesInput,
   RejectResultInput,
   RepechageInput,
@@ -28,7 +26,6 @@ import type {
 } from "@beermacs/shared";
 import { authClient } from "./auth-client";
 import { API_URL } from "./config";
-import { withTimeout } from "./with-timeout";
 
 export class ApiError extends Error {
   constructor(
@@ -45,16 +42,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   let res: Response;
   try {
-    res = await withTimeout(
-      fetch(`${API_URL}${path}`, {
-        ...init,
-        headers: {
-          "content-type": "application/json",
-          ...(cookie ? { Cookie: cookie } : {}),
-          ...init?.headers,
-        },
-      })
-    );
+    res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(cookie ? { Cookie: cookie } : {}),
+        ...init?.headers,
+      },
+    });
   } catch {
     // fetch() rejecting (no connection, DNS failure, etc.) is what turns
     // into an error a screen can show, rather than an unhandled rejection —
@@ -84,7 +79,7 @@ export interface MeResponse {
     id: string;
     displayName: string;
     email: string;
-    phone: string;
+    phone: string | null;
     image: string | null;
   };
   readonly memberships: readonly {
@@ -256,7 +251,7 @@ export interface VenuePlayer {
   readonly userId: string;
   readonly displayName: string;
   readonly email: string;
-  readonly phone: string;
+  readonly phone: string | null;
   readonly role: string;
   readonly joinedAt: string;
 }
@@ -376,10 +371,6 @@ export const api = {
   // ── Support (Profile's "?" button) ──────────────────────────────────────
   submitSupport: (body: SubmitSupportMessageInput) =>
     request<{ id: string }>(`/api/support`, { method: "POST", body: JSON.stringify(body) }),
-  unblockUser: (userId: string) =>
-    request<{ blockedUserId: string; blocked: boolean }>(`/api/users/${userId}/block`, {
-      method: "DELETE",
-    }),
   muteInTournament: (tournamentId: string, userId: string, reason?: string) =>
     request<{ userId: string; muted: boolean }>(
       `/api/tournaments/${tournamentId}/players/${userId}/mute`,
@@ -410,11 +401,6 @@ export const api = {
     }),
   deleteTeam: (teamId: string) =>
     request<{ id: string; deleted: boolean }>(`/api/teams/${teamId}`, { method: "DELETE" }),
-  manualPair: (roundId: string, body: ManualPairInput) =>
-    request<{ id: string }>(`/api/rounds/${roundId}/pair`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
   repechage: (roundId: string, body: RepechageInput = {}) =>
     request<{ roundId: string; teamId: string }>(`/api/rounds/${roundId}/repechage`, {
       method: "POST",
@@ -429,11 +415,6 @@ export const api = {
     ),
 
   // ── Admin console: tables (A-3/A-4) ─────────────────────────────────────
-  assignTable: (matchId: string, body: AssignTableInput) =>
-    request<{ id: string; tableId: string; state: MatchStateName }>(
-      `/api/matches/${matchId}/assign-table`,
-      { method: "POST", body: JSON.stringify(body) }
-    ),
   setTableState: (tableId: string, body: SetTableStateInput) =>
     request<{ id: string; state: "open" | "closed" }>(`/api/tables/${tableId}/state`, {
       method: "POST",

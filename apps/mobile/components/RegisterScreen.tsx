@@ -14,19 +14,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { authClient } from "../lib/auth-client";
-import { type CountryCode, defaultCountry } from "../lib/country-codes";
+import { API_URL } from "../lib/config";
 import { raw } from "../lib/theme";
-import { networkErrorMessage, withTimeout } from "../lib/with-timeout";
+import { networkErrorMessage } from "../lib/with-timeout";
 import AmbientBeer from "./AmbientBeer";
-import CountryCodePicker from "./CountryCodePicker";
 import GlowLogo from "./GlowLogo";
 
-// Every branch below calls `withTimeout` around the network call and runs
-// inside try/catch/finally — without that, a request that never resolves (a
-// dead network with no OS-level failure, a captive portal swallowing the
-// connection) left `busy` true forever: an infinite spinner with no way out
-// and no error explaining why. `networkErrorMessage` is what turns that into
-// an explicit, user-visible message instead.
+// Every branch below runs its network call inside try/catch/finally so `busy`
+// always resets, and `networkErrorMessage` turns a dead connection into an
+// explicit, user-visible message instead of an infinite spinner.
 
 /** Where forgot-password emails send people back to (D16-adjacent: see
  *  apps/web/lib/auth.ts's sendResetPassword). Handled inline by this same
@@ -46,12 +42,10 @@ type Mode = "register" | "signin" | "forgot" | "forgot_sent" | "reset";
  * `beermacs://reset-password?token=...` link directly with expo-linking
  * rather than through expo-router navigation.
  *
- * Email + password + phone is mandatory (G-1) — there is no anonymous or guest
- * path any more. Phone is validated loosely: it's stored so a venue can
- * re-contact players later (G-2/A-21), not checked against a delivery
- * mechanism, because there is no OTP anywhere in this app to fail if the
- * format is slightly wrong. The country-code selector only shapes *how* it's
- * typed and stored (E.164-ish, "+39 333…") — it doesn't tighten validation.
+ * Name + email + password is all signup asks for (G-1) — there is no
+ * anonymous or guest path. Phone is NOT collected here: App Review rejected
+ * build 11 under 5.1.1(v) for requiring it, so it's an optional Profile field
+ * now, explained where it's asked for.
  */
 /**
  * `onAuthenticated` still exists as a prop rather than reading the store
@@ -68,8 +62,6 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState("");
-  const [country, setCountry] = useState<CountryCode>(defaultCountry);
-  const [localPhone, setLocalPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -113,7 +105,7 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
       }
       setBusy(true);
       try {
-        const res = await withTimeout(authClient.signIn.email(parsed.data));
+        const res = await authClient.signIn.email(parsed.data);
         if (res.error) {
           setError(res.error.message ?? "Couldn't sign in. Check your email and password.");
           return;
@@ -135,9 +127,10 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
       }
       setBusy(true);
       try {
-        const res = await withTimeout(
-          authClient.requestPasswordReset({ email: parsed.data, redirectTo: RESET_PASSWORD_REDIRECT })
-        );
+        const res = await authClient.requestPasswordReset({
+          email: parsed.data,
+          redirectTo: RESET_PASSWORD_REDIRECT,
+        });
         if (res.error) {
           setError(res.error.message ?? "Couldn't send that email. Try again in a moment.");
           return;
@@ -166,9 +159,7 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
       }
       setBusy(true);
       try {
-        const res = await withTimeout(
-          authClient.resetPassword({ newPassword: password, token: resetToken })
-        );
+        const res = await authClient.resetPassword({ newPassword: password, token: resetToken });
         if (res.error) {
           setError(res.error.message ?? "That reset link has expired. Request a new one.");
           return;
@@ -194,9 +185,7 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
       setError("Passwords don't match.");
       return;
     }
-    const digits = localPhone.replace(/[^\d]/g, "");
-    const phone = digits ? `${country.dial}${digits}` : "";
-    const parsed = registerInput.safeParse({ email, password, displayName, phone });
+    const parsed = registerInput.safeParse({ email, password, displayName });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Check the form for a mistake.");
       return;
@@ -207,7 +196,7 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
       // client isn't type-linked to the server's `auth` instance (separate
       // app), so TS only knows the base signUp.email shape and would apply
       // excess-property checking to a literal. Better Auth's additional
-      // fields (displayName, phone — see apps/web/lib/auth.ts) still reach
+      // fields (displayName — see apps/web/lib/auth.ts) still reach
       // the server at runtime either way; this only works around the
       // compile-time check.
       const payload = {
@@ -215,9 +204,8 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
         password: parsed.data.password,
         name: parsed.data.displayName,
         displayName: parsed.data.displayName,
-        phone: parsed.data.phone,
       };
-      const res = await withTimeout(authClient.signUp.email(payload));
+      const res = await authClient.signUp.email(payload);
       if (res.error) {
         setError(res.error.message ?? "Couldn't create that account.");
         return;
@@ -234,8 +222,6 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
     password,
     confirmPassword,
     displayName,
-    country,
-    localPhone,
     resetToken,
     onAuthenticated,
     switchMode,
@@ -272,6 +258,7 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
                   onChangeText={setDisplayName}
                   autoCapitalize="words"
                   textContentType="name"
+                  autoComplete="name"
                 />
               ) : null}
 
@@ -284,28 +271,8 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
                   autoCapitalize="none"
                   autoCorrect={false}
                   textContentType="emailAddress"
+                  autoComplete="email"
                 />
-              ) : null}
-
-              {mode === "register" ? (
-                <View className="gap-1.5">
-                  <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-                    Phone
-                  </Text>
-                  <View className="flex-row gap-2">
-                    <CountryCodePicker value={country} onChange={setCountry} />
-                    <TextInput
-                      value={localPhone}
-                      onChangeText={setLocalPhone}
-                      keyboardType="phone-pad"
-                      textContentType="telephoneNumber"
-                      placeholder="333 123 4567"
-                      placeholderTextColor={raw.textFaint}
-                      accessibilityLabel="Phone number"
-                      className="min-h-[48px] flex-1 rounded-lg border border-stout-500 bg-stout-900/70 px-4 font-sans text-[15px] text-cream"
-                    />
-                  </View>
-                </View>
               ) : null}
 
               {mode !== "forgot" ? (
@@ -317,6 +284,7 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
                   toggleSecure={() => setShowPassword((v) => !v)}
                   secureVisible={showPassword}
                   textContentType={mode === "signin" ? "password" : "newPassword"}
+                  autoComplete={mode === "signin" ? "current-password" : "new-password"}
                   onSubmitEditing={mode === "register" || mode === "reset" ? undefined : submit}
                 />
               ) : null}
@@ -328,6 +296,7 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showPassword}
                   textContentType="newPassword"
+                  autoComplete="new-password"
                   onSubmitEditing={submit}
                 />
               ) : null}
@@ -382,6 +351,28 @@ export default function RegisterScreen({ onAuthenticated }: { onAuthenticated: (
             </Pressable>
           )}
 
+          {mode === "register" ? (
+            <Text className="text-center font-sans text-[12px] leading-[18px] text-cream-dim">
+              By creating an account you agree to the{" "}
+              <Text
+                onPress={() => void Linking.openURL(`${API_URL}/terms`)}
+                accessibilityRole="link"
+                className="text-beer-400 underline"
+              >
+                Terms of use
+              </Text>{" "}
+              (zero tolerance for abusive content or users) and the{" "}
+              <Text
+                onPress={() => void Linking.openURL(`${API_URL}/privacy`)}
+                accessibilityRole="link"
+                className="text-beer-400 underline"
+              >
+                Privacy policy
+              </Text>
+              .
+            </Text>
+          ) : null}
+
           {mode === "register" || mode === "signin" ? (
             <Pressable
               onPress={() => switchMode(mode === "register" ? "signin" : "register")}
@@ -427,13 +418,13 @@ function headline(mode: Mode): string {
 function subhead(mode: Mode): string {
   switch (mode) {
     case "register":
-      return "One account gets you into any tournament, and lets the bar reach you about the next one.";
+      return "One account gets you into any tournament at any bar.";
     case "signin":
       return "Sign in to pick up where you left off.";
     case "forgot":
       return "Enter the email on your account and we'll send you a link to reset your password.";
     case "forgot_sent":
-      return "If that email has an account, a reset link is on its way. It expires in an hour.";
+      return "If that email has an account, a reset link is on its way. It expires in an hour. Not arriving? Email support@beermacs.com.";
     case "reset":
       return "Choose a new password for your account.";
   }
@@ -458,13 +449,14 @@ function Field(props: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
-  keyboardType?: "default" | "email-address" | "phone-pad";
+  keyboardType?: "default" | "email-address";
   autoCapitalize?: "none" | "words";
   autoCorrect?: boolean;
   secureTextEntry?: boolean;
   toggleSecure?: () => void;
   secureVisible?: boolean;
   textContentType?: React.ComponentProps<typeof TextInput>["textContentType"];
+  autoComplete?: React.ComponentProps<typeof TextInput>["autoComplete"];
   onSubmitEditing?: () => void;
 }) {
   return (
@@ -481,6 +473,7 @@ function Field(props: {
           autoCorrect={props.autoCorrect ?? true}
           secureTextEntry={props.secureTextEntry}
           textContentType={props.textContentType}
+          autoComplete={props.autoComplete}
           onSubmitEditing={props.onSubmitEditing}
           placeholderTextColor={raw.textFaint}
           accessibilityLabel={props.label}

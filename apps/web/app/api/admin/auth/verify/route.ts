@@ -2,7 +2,13 @@
 
 import { adminVerifyOtpInput } from "@beermacs/shared";
 import { NextResponse } from "next/server";
-import { consumeAdminOtp } from "@/lib/admin-auth";
+import {
+  clearAdminFailures,
+  clientIp,
+  consumeAdminOtp,
+  isIpLocked,
+  recordAdminFailure,
+} from "@/lib/admin-auth";
 import { ADMIN_COOKIE_MAX_AGE_SECONDS, ADMIN_COOKIE_NAME, createAdminSessionCookieValue } from "@/lib/admin-session";
 import { handleError, parseBody } from "@/lib/http";
 import { HttpError } from "@/lib/session";
@@ -12,8 +18,14 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   try {
     const body = await parseBody(req, adminVerifyOtpInput);
+    const ip = clientIp(req);
+    if (await isIpLocked(ip)) throw new HttpError(423, "locked");
     const ok = await consumeAdminOtp(body.otp);
-    if (!ok) throw new HttpError(401, "invalid_or_expired_code");
+    if (!ok) {
+      await recordAdminFailure(ip);
+      throw new HttpError(401, "invalid_or_expired_code");
+    }
+    await clearAdminFailures(ip);
 
     const res = NextResponse.json({ ok: true });
     res.cookies.set(ADMIN_COOKIE_NAME, createAdminSessionCookieValue(), {

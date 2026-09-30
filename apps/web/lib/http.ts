@@ -36,6 +36,12 @@ export function handleError(e: unknown): NextResponse {
   if (e instanceof HttpError) {
     return NextResponse.json({ error: e.code, detail: e.message }, { status: e.status });
   }
+  // Prisma's known errors: a guessed id (findUniqueOrThrow) is a 404, and a
+  // lost unique-constraint race (two dispatch passes, double submit) is a
+  // 409 the client can retry — neither is a server fault.
+  const code = (e as { code?: unknown } | null)?.code;
+  if (code === "P2025") return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (code === "P2002") return NextResponse.json({ error: "conflict" }, { status: 409 });
   console.error("[api] unhandled", e);
   return NextResponse.json({ error: "internal_error" }, { status: 500 });
 }

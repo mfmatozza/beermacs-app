@@ -1,5 +1,57 @@
 # App Store compliance checklist
 
+## Resubmission runbook (after the build 11 rejection, 2026-09-17)
+
+Apple rejected 0.1.0 (11) for: **5.1.1(v)** phone number required at signup;
+**2.1(a)** no working demo account with a team and chat; **2.1** "does the app
+contain a widget?". All three are addressed in code; these are the steps, in
+order — the server must be live before the new build is reviewed.
+
+1. **Secrets.** Repo private. Rotate `ADMIN_PASSWORD_HASH` (and ideally
+   `BETTER_AUTH_SECRET`) on Vercel — the old values were committed publicly.
+2. **Email.** Set `RESEND_API_KEY` + `RESEND_FROM_EMAIL` (verified domain) on
+   Vercel. Without it, "Forgot password" silently sends nothing — a reviewer
+   tapping it sees a broken feature. Then `ADMIN_2FA_ENABLED=true`.
+3. **Env check.** `BETTER_AUTH_URL=https://app.beermacs.com` on Vercel (the
+   app now refuses to boot in production without it).
+4. **Migrate prod DB:** `DIRECT_URL=<unpooled> npm run migrate:deploy -w @beermacs/db`
+   (`npx prisma migrate status` first to see what's pending).
+5. **Deploy web** (Vercel). Build 11 keeps working — it still sends a phone,
+   which is still accepted.
+6. **Seed the demo:** `REVIEW_PASSWORD=<new> DIRECT_URL=… npm run seed -w @beermacs/db`.
+   Log in as review@beermacs.com on a device and check: Home shows the
+   Table 1 match, Chat has messages, Profile → Admin reaches the venue.
+7. **Build + submit:** `eas build -p ios --profile production`, then
+   `eas submit`. Check the build's Info.plist has only the photo-library
+   usage string (no camera/microphone/Face ID).
+8. **App Store Connect:**
+   - App Privacy: Contact Info → Email (required), Name, Phone (optional),
+     all "App Functionality", linked to identity, not used for tracking.
+     User Content → Other (chat), Photos (profile picture).
+   - Age rating: alcohol references → answer honestly (the terms require
+     legal drinking age).
+   - App Review Information → Sign-in: `review@beermacs.com` / the seeded
+     password. Notes: see the reply below.
+9. **Reply to App Review** (paste into the resolution center):
+
+   > Thank you for the review. We've addressed each point in build 0.1.0 (12):
+   >
+   > **5.1.1(v)** — The phone number is no longer requested at sign-up. It is
+   > now an optional field in Profile, clearly labelled as optional, and the
+   > app works fully without it.
+   >
+   > **2.1(a)** — Demo account: review@beermacs.com / [password]. It is
+   > captain of the team "The Reviewers" in the live tournament "Porter House
+   > Open", with a match in progress on Table 1 and existing messages in the
+   > tournament chat and match chat. The same account owns the venue, so
+   > Profile → Admin opens the staff console (teams, rounds, tables,
+   > disputes, messages). To test account deletion, please create a new
+   > account (so the demo stays intact for other reviewers).
+   >
+   > **2.1** — No, this build does not include any widget. The app has no
+   > widget extension, App Group or WidgetKit code.
+
+
 Written because the goal is explicit: pass review on the first submission.
 Each item names the guideline it comes from and what specifically has to exist
 in the app or in App Store Connect before submitting. Update this file as items
@@ -30,11 +82,9 @@ after a rejection.
       confirms the current password, calls Better Auth's delete-user, signs
       the device out on success. Verified against Neon: the User row is gone
       afterward, not just the session.
-- [ ] **Privacy policy accuracy.** `apps/web/app/privacy` must say plainly:
-      we collect email and phone at signup; venue admins can see a player's
-      email/phone (A-21, to re-contact for future nights); how to delete an
-      account. The current page still describes the old anonymous-first
-      design — needs a rewrite alongside the registration screen.
+- [x] **Privacy policy accuracy.** (Rewritten 2026-09-30; phone now optional.) `apps/web/app/privacy` must say plainly:
+      email + name required, phone optional; venue admins can see a
+      player's email/phone (A-21); deletion from Profile.
 - [ ] **App Privacy "nutrition label"** in App Store Connect must match the
       privacy policy exactly: Contact Info (email, phone) linked to identity,
       used for App Functionality — not for tracking, not for advertising.
@@ -58,13 +108,13 @@ after a rejection.
 
 Guideline 1.2 requires all four of these before UGC can ship, not just some:
 
-- [ ] A way to report objectionable content or a user, reachable from inside
-      the chat screen itself.
-- [ ] A way to block a user (at minimum: stop seeing their messages).
-- [ ] Venue staff can remove content or mute a player in their own tournament
+- [x] A way to report objectionable content or a user, reachable from inside
+      the chat screen itself. Reports also land in the admin support inbox.
+- [x] A way to block a user (at minimum: stop seeing their messages).
+- [x] Venue staff can remove content or mute a player in their own tournament
       (already the intended admin capability, U-10/A-20 — needs to actually be
       reachable from the chat UI, not just possible via the API).
-- [ ] A published way to contact us about content — `apps/web/app/support`
+- [x] A published way to contact us about content — `apps/web/app/support`
       already exists; make sure it's linked from inside the chat screen too,
       not only from the marketing site.
 
@@ -92,7 +142,7 @@ Guideline 1.2 requires all four of these before UGC can ship, not just some:
 
 ## Functional completeness (guideline 2.1)
 
-- [ ] No placeholder screen should read as broken. The `ComingSoon` component
+- [x] No placeholder screen should read as broken. (`ComingSoon` deleted 2026-09-30 — nothing stubbed ships.) The `ComingSoon` component
       already names the milestone rather than saying nothing — keep that
       pattern for anything still stubbed at submission time, and prefer
       finishing the feature over shipping the stub if there's a choice.

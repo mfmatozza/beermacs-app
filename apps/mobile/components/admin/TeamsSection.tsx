@@ -79,6 +79,8 @@ export default function TeamsSection({
       className="flex-1"
       contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 40 }}
       contentContainerClassName="gap-4 px-4"
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
     >
       <View className="gap-2 rounded-2xl border border-stout-600 bg-stout-750/85 p-4">
         <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
@@ -115,10 +117,12 @@ export default function TeamsSection({
         ) : null}
       </View>
 
-      {teamsQuery.isLoading || !teamsQuery.data ? (
-        <ActivityIndicator color={raw.beer} />
-      ) : teamsQuery.isError ? (
-        <Text className="font-sans text-[13px] text-dispute">Couldn&rsquo;t load the roster.</Text>
+      {!teamsQuery.data ? (
+        teamsQuery.isError ? (
+          <Text className="font-sans text-[13px] text-dispute">Couldn&rsquo;t load the roster.</Text>
+        ) : (
+          <ActivityIndicator color={raw.beer} />
+        )
       ) : teamsQuery.data.teams.length === 0 ? (
         <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
           No teams yet — add one above, or wait for players to join with the tournament code.

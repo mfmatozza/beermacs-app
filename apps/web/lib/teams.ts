@@ -25,6 +25,16 @@ async function uniqueTeamJoinCode(): Promise<string> {
   throw new Error("Could not generate a unique team join code after 8 attempts");
 }
 
+/** One team per player per tournament. Otherwise a player on both sides
+ *  of a match can "confirm" their own team's claim as the opponent. */
+export async function assertNotOnATeam(userId: string, tournamentId: string): Promise<void> {
+  const existing = await prisma.teamMember.findFirst({
+    where: { userId, team: { tournamentId } },
+    select: { id: true },
+  });
+  if (existing) throw new HttpError(409, "already_on_a_team");
+}
+
 export async function createTeamInTournament(
   tournamentId: string,
   name: string,
@@ -46,6 +56,8 @@ export async function createTeamInTournament(
   if (tournament.status !== "REGISTRATION" && tournament.status !== "RUNNING") {
     throw new HttpError(409, "tournament_not_open");
   }
+
+  if (captainUserId) await assertNotOnATeam(captainUserId, tournamentId);
 
   const firstStage = tournament.stages[0];
   if (!firstStage) throw new HttpError(500, "tournament_has_no_stage");

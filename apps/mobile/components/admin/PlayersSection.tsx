@@ -21,12 +21,14 @@ export default function PlayersSection({
       contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 40 }}
       contentContainerClassName="gap-3 px-4"
     >
-      {playersQuery.isLoading || !playersQuery.data ? (
-        <ActivityIndicator color={raw.beer} />
-      ) : playersQuery.isError ? (
-        <Text className="font-sans text-[13px] text-dispute">
-          Couldn&rsquo;t load the player directory — this needs a venue owner or admin account.
-        </Text>
+      {!playersQuery.data ? (
+        playersQuery.isError ? (
+          <Text className="font-sans text-[13px] text-dispute">
+            Couldn&rsquo;t load the player directory — this needs a venue owner or admin account.
+          </Text>
+        ) : (
+          <ActivityIndicator color={raw.beer} />
+        )
       ) : (
         <>
           <Text className="font-sans text-[12px] text-cream-dim">

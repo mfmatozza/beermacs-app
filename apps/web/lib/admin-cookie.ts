@@ -13,7 +13,8 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 
 const COOKIE_NAME = "beermacs_admin";
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+// One working night. Stateless = unrevocable, so keep the window short.
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 function secret(): string {
   const s = process.env.BETTER_AUTH_SECRET;

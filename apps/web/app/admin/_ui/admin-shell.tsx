@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   FileIcon,
   HomeIcon,
+  LockIcon,
   MailIcon,
   MenuIcon,
   ShieldIcon,
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/admin/support", label: "Support", icon: MailIcon },
   { href: "/admin/access", label: "Access", icon: ShieldIcon },
   { href: "/admin/content", label: "Site content", icon: FileIcon },
+  { href: "/admin/security", label: "Security", icon: LockIcon },
 ] as const;
 
 function Brand() {

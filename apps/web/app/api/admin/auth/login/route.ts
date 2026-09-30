@@ -12,7 +12,11 @@ import { NextResponse } from "next/server";
 import {
   admin2faEnabled,
   adminConfigured,
+  clearAdminFailures,
+  clientIp,
+  isIpLocked,
   issueAdminOtp,
+  recordAdminFailure,
   verifyAdminCredentials,
 } from "@/lib/admin-auth";
 import { ADMIN_COOKIE_MAX_AGE_SECONDS, ADMIN_COOKIE_NAME, createAdminSessionCookieValue } from "@/lib/admin-session";
@@ -25,12 +29,16 @@ export async function POST(req: Request) {
   try {
     if (!adminConfigured()) throw new HttpError(503, "admin_not_configured");
     const body = await parseBody(req, adminLoginInput);
+    const ip = clientIp(req);
+    if (await isIpLocked(ip)) throw new HttpError(423, "locked");
 
     if (!verifyAdminCredentials(body.username, body.password)) {
+      await recordAdminFailure(ip);
       throw new HttpError(401, "invalid_credentials");
     }
 
     if (!admin2faEnabled()) {
+      await clearAdminFailures(ip);
       const res = NextResponse.json({ needsOtp: false });
       res.cookies.set(ADMIN_COOKIE_NAME, createAdminSessionCookieValue(), {
         httpOnly: true,

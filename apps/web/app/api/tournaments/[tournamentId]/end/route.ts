@@ -1,6 +1,7 @@
 // POST /api/tournaments/:tournamentId/end — an admin ending a tournament.
 //
-// Terminal and one-way: status -> COMPLETE, endedAt set. Everything else
+// status -> COMPLETE, endedAt set. Undone only by ../reopen (a mis-tap at
+// the end of a night shouldn't need a database script). Everything else
 // this needs was already true or trivially true once status is COMPLETE,
 // not new mechanism:
 //   - Stop new automatic scheduling: lib/dispatch.ts's runDispatchPass
@@ -46,7 +47,7 @@ export async function POST(
       select: { venueId: true, status: true, endedAt: true },
     });
     if (!tournament) throw new HttpError(404, "tournament_not_found");
-    await requireVenueRoleOrAdmin(tournament.venueId, Role.VENUE_ADMIN);
+    const viewer = await requireVenueRoleOrAdmin(tournament.venueId, Role.VENUE_ADMIN);
 
     // Idempotent, same as openRound: ending an already-ended tournament is
     // a no-op, not an error — a staff phone retrying a flaky request should
@@ -64,6 +65,9 @@ export async function POST(
         prisma.venueTable.updateMany({
           where: { id: { in: stuckTableIds.map((m) => m.venueTableId!) } },
           data: { state: "OPEN" },
+        }),
+        prisma.auditEntry.create({
+          data: { tournamentId, actorUserId: viewer.userId, action: "tournament.end" },
         }),
       ]);
     }

@@ -14,6 +14,7 @@ import { prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
 import { HttpError, requireViewer } from "@/lib/session";
+import { assertNotOnATeam } from "@/lib/teams";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,12 @@ export async function POST(req: Request) {
       where: { userId_venueId: { userId: viewer.userId, venueId: team.tournament.venueId } },
     });
     if (!membership) throw new HttpError(403, "not_a_member");
+
+    const already = await prisma.teamMember.findUnique({
+      where: { teamId_userId: { teamId: team.id, userId: viewer.userId } },
+      select: { id: true },
+    });
+    if (!already) await assertNotOnATeam(viewer.userId, team.tournamentId);
 
     await prisma.teamMember.upsert({
       where: { teamId_userId: { teamId: team.id, userId: viewer.userId } },

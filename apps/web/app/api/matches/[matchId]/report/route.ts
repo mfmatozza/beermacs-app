@@ -15,6 +15,7 @@ import { handleError, parseBody } from "@/lib/http";
 import {
   advanceWinnerToNextRound,
   MATCH_STATE_TO_PRISMA,
+  updateMatchFrom,
   toDomainMatch,
 } from "@/lib/match-mapping";
 import { sendNotifyIntents } from "@/lib/notify";
@@ -73,16 +74,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     // "reported", and releasesTable may already be set. Either way the write
     // is the same shape.
     await prisma.$transaction(async (tx) => {
-      await tx.match.update({
-        where: { id: matchId },
-        data: {
+      await updateMatchFrom(tx, matchId, row.state, {
           state: MATCH_STATE_TO_PRISMA[next.state],
           winnerTeamId: next.winnerId,
           homeScore: next.score?.home ?? null,
           awayScore: next.score?.away ?? null,
           venueTableId: next.tableId,
           ...(next.state === "confirmed" ? { settledAt: new Date() } : {}),
-        },
       });
       await tx.matchReport.create({
         data: {

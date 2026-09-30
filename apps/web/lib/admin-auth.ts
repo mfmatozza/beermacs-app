@@ -103,6 +103,46 @@ export async function issueAdminOtp(): Promise<void> {
   });
 }
 
+// ── Lockout ──────────────────────────────────────────────────────────────
+//
+// Per IP, not per account: there is one admin account, and locking IT would
+// hand any attacker a free way to lock the real admin out. 10 failures (bad
+// password or bad OTP) locks that IP until the admin unlocks it from
+// /admin/security; a lock also ages out after a day so a forgotten one isn't
+// permanent. A success clears the counter.
+
+const MAX_FAILURES = 10;
+const LOCK_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Vercel sets x-forwarded-for; the first hop is the client. */
+export function clientIp(req: Request): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}
+
+export async function isIpLocked(ip: string): Promise<boolean> {
+  const row = await prisma.adminLoginLock.findUnique({ where: { ip } });
+  return Boolean(row?.lockedAt && row.lockedAt.getTime() > Date.now() - LOCK_TTL_MS);
+}
+
+export async function recordAdminFailure(ip: string): Promise<void> {
+  const row = await prisma.adminLoginLock.upsert({
+    where: { ip },
+    create: { ip, failures: 1 },
+    update: { failures: { increment: 1 } },
+  });
+  if (row.failures >= MAX_FAILURES && !row.lockedAt) {
+    await prisma.adminLoginLock.update({ where: { ip }, data: { lockedAt: new Date() } });
+  }
+}
+
+export async function clearAdminFailures(ip: string): Promise<void> {
+  await prisma.adminLoginLock.deleteMany({ where: { ip } });
+}
+
 /** Verify + single-use consume the pending OTP. */
 export async function consumeAdminOtp(otp: string): Promise<boolean> {
   const rec = await prisma.verification.findFirst({
@@ -117,7 +157,9 @@ export async function consumeAdminOtp(otp: string): Promise<boolean> {
   const expected = Buffer.from(rec.value);
   const got = Buffer.from(hashOtp(otp));
   const ok = expected.length === got.length && crypto.timingSafeEqual(expected, got);
-  if (ok) await prisma.verification.deleteMany({ where: { identifier: OTP_IDENTIFIER } });
+  // Single-use either way: a wrong guess burns the code, so guessing means a
+  // fresh password login (and a fresh lockout count) per attempt.
+  await prisma.verification.deleteMany({ where: { identifier: OTP_IDENTIFIER } });
   return ok;
 }
 

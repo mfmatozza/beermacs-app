@@ -17,9 +17,10 @@ const id = z.string().min(1);
 // ── Accounts (G-1/G-2, D10) ──────────────────────────────────────────────────
 
 /**
- * One form for everyone — player or staff. Phone is mandatory (G-1): it is
- * contact data for the venue to re-use next time (G-2/A-21), never a second
- * auth factor, so there is no OTP round trip to validate here.
+ * One form for everyone — player or staff. Phone is OPTIONAL: App Review
+ * rejected build 11 under 5.1.1(v) for requiring it, since the tournament
+ * doesn't need it to work. It is only contact data a venue may use (A-21),
+ * never an auth factor. Blank becomes undefined so nothing stores "".
  */
 export const registerInput = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -28,7 +29,13 @@ export const registerInput = z.object({
   /** Loose on purpose — international formats vary too much to pattern-match
    *  usefully. A junk value still lets the venue attempt contact; it isn't a
    *  gate on using the app. */
-  phone: z.string().trim().min(4).max(24),
+  phone: z
+    .string()
+    .trim()
+    .max(24)
+    .optional()
+    .transform((v) => v || undefined)
+    .refine((v) => v === undefined || v.length >= 4, { message: "Phone looks too short" }),
 });
 export type RegisterInput = z.infer<typeof registerInput>;
 

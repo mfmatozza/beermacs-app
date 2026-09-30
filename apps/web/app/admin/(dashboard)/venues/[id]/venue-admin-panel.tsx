@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { api, errorText } from "../../../_ui/api";
 import { Badge } from "../../../_ui/badge";
 import { Button } from "../../../_ui/button";
 import { Card } from "../../../_ui/card";
@@ -19,18 +20,6 @@ const STATUS_TONE = {
   COMPLETE: "neutral",
   CANCELED: "dispute",
 } as const;
-
-async function api(path: string, init?: RequestInit) {
-  const res = await fetch(path, {
-    ...init,
-    headers: { "content-type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `http_${res.status}`);
-  }
-  return res.json().catch(() => ({}));
-}
 
 export function VenueAdminPanel({ venue: v }: { venue: VenueAdminData }) {
   const router = useRouter();
@@ -51,8 +40,21 @@ export function VenueAdminPanel({ venue: v }: { venue: VenueAdminData }) {
       });
       setEditing(false);
       refresh();
-    } catch {
-      setError("Couldn't save those changes.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't save those changes."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restoreVenue = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/admin/venues/${v.id}/restore`, { method: "POST" });
+      refresh();
+    } catch (e) {
+      setError(errorText(e, "Couldn't restore this venue."));
     } finally {
       setBusy(false);
     }
@@ -65,8 +67,8 @@ export function VenueAdminPanel({ venue: v }: { venue: VenueAdminData }) {
     try {
       await api(`/api/venues/${v.id}`, { method: "DELETE" });
       router.push("/admin/venues");
-    } catch {
-      setError("Couldn't delete this venue.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't delete this venue."));
       setBusy(false);
     }
   };
@@ -102,14 +104,25 @@ export function VenueAdminPanel({ venue: v }: { venue: VenueAdminData }) {
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 Edit
               </Button>
-              <Button variant="danger" onClick={() => void deleteVenue()} disabled={busy}>
-                Delete
-              </Button>
+              {v.deletedAt ? (
+                <Button onClick={() => void restoreVenue()} disabled={busy}>
+                  Restore
+                </Button>
+              ) : (
+                <Button variant="danger" onClick={() => void deleteVenue()} disabled={busy}>
+                  Delete
+                </Button>
+              )}
             </>
           }
         />
       )}
       {!editing && error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+      {v.deletedAt ? (
+        <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+          This venue is deleted: its staff have no access and it's hidden from the app. Restore to undo.
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
@@ -191,8 +204,8 @@ function TablesPanel({
       await api(`/api/venues/${venueId}/tables`, { method: "POST", body: JSON.stringify({ label: label.trim() }) });
       setLabel("");
       onChanged();
-    } catch {
-      setError("Couldn't add that table — the label may already be used.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't add that table — the label may already be used."));
     } finally {
       setBusy(false);
     }
@@ -238,8 +251,8 @@ function TableTile({ table, onChanged }: { table: Table; onChanged: () => void }
     try {
       await api(`/api/tables/${table.id}`, { method: "PATCH", body: JSON.stringify({ label: label.trim() }) });
       onChanged();
-    } catch {
-      setError("Label already used.");
+    } catch (e) {
+      setError(errorText(e, "Label already used."));
     } finally {
       setBusy(false);
       setEditing(false);
@@ -247,6 +260,7 @@ function TableTile({ table, onChanged }: { table: Table; onChanged: () => void }
   };
 
   const toggle = async (force = false) => {
+    if (force && !confirm(`Force-release ${table.label}? Only do this if nothing is really being played on it.`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -255,8 +269,8 @@ function TableTile({ table, onChanged }: { table: Table; onChanged: () => void }
         body: JSON.stringify({ state: table.state === "OPEN" ? "closed" : "open", force }),
       });
       onChanged();
-    } catch {
-      setError("That table has a live match on it.");
+    } catch (e) {
+      setError(errorText(e, "That table has a live match on it."));
     } finally {
       setBusy(false);
     }
@@ -268,8 +282,8 @@ function TableTile({ table, onChanged }: { table: Table; onChanged: () => void }
     try {
       await api(`/api/tables/${table.id}`, { method: "DELETE" });
       onChanged();
-    } catch {
-      setError("Couldn't remove — it's in use.");
+    } catch (e) {
+      setError(errorText(e, "Couldn't remove — it's in use."));
     } finally {
       setBusy(false);
     }
@@ -290,7 +304,13 @@ function TableTile({ table, onChanged }: { table: Table; onChanged: () => void }
           className="mb-1 text-sm"
         />
       ) : (
-        <button type="button" onClick={() => setEditing(true)} className="mb-1 block text-sm font-medium text-gray-900">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="Rename"
+          aria-label={`Rename ${table.label}`}
+          className="mb-1 block text-sm font-medium text-gray-900"
+        >
           {table.label}
         </button>
       )}

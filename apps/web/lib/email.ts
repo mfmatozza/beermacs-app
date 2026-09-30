@@ -21,7 +21,10 @@ export async function sendEmail(params: {
 }): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.log(`[email:dev-fallback] to=${params.to} subject="${params.subject}"\n${params.html}`);
+    // Never print the body in production: it carries reset links and admin
+    // OTPs, and Vercel logs are readable by anyone on the team.
+    const body = process.env.NODE_ENV === "production" ? "[body withheld]" : params.html;
+    console.log(`[email:dev-fallback] to=${params.to} subject="${params.subject}"\n${body}`);
     return;
   }
 

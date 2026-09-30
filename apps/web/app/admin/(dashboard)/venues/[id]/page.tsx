@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireAdminPage } from "@/lib/admin-session";
 import { Prisma, prisma } from "@beermacs/db";
 import { VenueAdminPanel } from "./venue-admin-panel";
 
@@ -9,6 +10,7 @@ const VENUE_SELECT = {
   name: true,
   city: true,
   slug: true,
+  deletedAt: true,
   memberships: {
     orderBy: { role: "desc" },
     select: { role: true, user: { select: { id: true, displayName: true, email: true } } },
@@ -23,6 +25,7 @@ const VENUE_SELECT = {
 export type VenueAdminData = Prisma.VenueGetPayload<{ select: typeof VENUE_SELECT }>;
 
 export default async function VenueDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const { id } = await params;
   const venue = await prisma.venue.findUnique({ where: { id }, select: VENUE_SELECT });
   if (!venue) notFound();

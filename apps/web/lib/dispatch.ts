@@ -172,16 +172,27 @@ export async function runDispatchPass(venueId: string): Promise<DispatchSummary>
 
   let tableAssignments = 0;
   for (const { matchId, tableId } of plan.assignments) {
-    const claimed = await prisma.venueTable.updateMany({
-      where: { id: tableId, state: "OPEN" },
-      data: { state: "BUSY" },
+    // Table claim and match move together, both conditional: two concurrent
+    // passes could otherwise seat one match on two tables (the loser's table
+    // stuck BUSY forever) and push "you're up" twice.
+    const seated = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.venueTable.updateMany({
+        where: { id: tableId, state: "OPEN" },
+        data: { state: "BUSY" },
+      });
+      if (claimed.count === 0) return false; // another pass claimed the table
+      const moved = await tx.match.updateMany({
+        where: { id: matchId, state: { in: ["QUEUED", "SCHEDULED"] }, venueTableId: null },
+        data: { state: "ON_TABLE", venueTableId: tableId, calledAt: new Date() },
+      });
+      if (moved.count === 0) {
+        // Another pass seated the match first — give the table back.
+        await tx.venueTable.update({ where: { id: tableId }, data: { state: "OPEN" } });
+        return false;
+      }
+      return true;
     });
-    if (claimed.count === 0) continue; // another dispatch pass claimed it first
-
-    await prisma.match.update({
-      where: { id: matchId },
-      data: { state: "ON_TABLE", venueTableId: tableId, calledAt: new Date() },
-    });
+    if (!seated) continue;
     tableAssignments += 1;
 
     // Same "you're up" intent transition()'s assign_table event would have

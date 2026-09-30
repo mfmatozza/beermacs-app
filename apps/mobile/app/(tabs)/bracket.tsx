@@ -1,12 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
+import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, type BoardMatch, type BoardRound, type BoardStage } from "../../lib/api";
-import { findMyNextUp, toNextUpState } from "../../lib/next-up";
 import { TAB_BAR_HEIGHT, raw } from "../../lib/theme";
 import { useCurrentTeam } from "../../lib/use-current-team";
-import NextUpCard, { type NextUpState } from "../../components/NextUpCard";
+import { useNextUp } from "../../lib/use-next-up";
+import NextUpCard from "../../components/NextUpCard";
 
 /**
  * Bracket & standings (U-7/E-5) — public, so this screen needs only a
@@ -25,8 +24,6 @@ import NextUpCard, { type NextUpState } from "../../components/NextUpCard";
  */
 export default function BracketTab() {
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
-
   const { myTeam, isLoading: meLoading } = useCurrentTeam();
   const tournamentId = myTeam?.team.tournament.id ?? null;
 
@@ -38,51 +35,7 @@ export default function BracketTab() {
     refetchInterval: 3000,
   });
 
-  const invalidateBoard = () => {
-    void queryClient.invalidateQueries({ queryKey: ["board", tournamentId] });
-  };
-
-  const reportMutation = useMutation({
-    mutationFn: (vars: { matchId: string; winnerId: string }) =>
-      api.reportMatch(vars.matchId, { winnerId: vars.winnerId }),
-    onSuccess: invalidateBoard,
-  });
-  const confirmMutation = useMutation({
-    mutationFn: (matchId: string) => api.confirmMatch(matchId),
-    onSuccess: invalidateBoard,
-  });
-  const rejectMutation = useMutation({
-    mutationFn: (matchId: string) => api.rejectMatch(matchId, {}),
-    onSuccess: invalidateBoard,
-  });
-
-  const mine = useMemo(() => {
-    if (!boardQuery.data || !myTeam) return null;
-    return findMyNextUp(boardQuery.data.stages, myTeam.team.id);
-  }, [boardQuery.data, myTeam]);
-
-  const nextUpState: NextUpState | null = useMemo(() => {
-    if (!mine || !myTeam) return null;
-    return toNextUpState(mine, myTeam.team.id, {
-      reporting: reportMutation.isPending,
-      confirmBusy: confirmMutation.isPending || rejectMutation.isPending,
-      onReport: (winnerIsMe) => {
-        if (mine.kind !== "match") return;
-        const opponentTeamId =
-          mine.match.home?.teamId === myTeam.team.id
-            ? mine.match.away?.teamId
-            : mine.match.home?.teamId;
-        const winnerId = winnerIsMe ? myTeam.team.id : (opponentTeamId ?? myTeam.team.id);
-        reportMutation.mutate({ matchId: mine.match.id, winnerId });
-      },
-      onConfirm: () => {
-        if (mine.kind === "match") confirmMutation.mutate(mine.match.id);
-      },
-      onDispute: () => {
-        if (mine.kind === "match") rejectMutation.mutate(mine.match.id);
-      },
-    });
-  }, [mine, myTeam, reportMutation, confirmMutation, rejectMutation]);
+  const { mine, nextUpState } = useNextUp(tournamentId, myTeam?.team.id ?? null, boardQuery.data);
 
   return (
     <ScrollView
@@ -93,6 +46,13 @@ export default function BracketTab() {
       }}
       contentContainerClassName="gap-6 px-4"
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={boardQuery.isRefetching && !boardQuery.isLoading}
+          onRefresh={() => void boardQuery.refetch()}
+          tintColor={raw.beer}
+        />
+      }
     >
       <View className="gap-1">
         <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
@@ -111,9 +71,9 @@ export default function BracketTab() {
         <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
           You&rsquo;re not in a tournament right now — join one from Home.
         </Text>
-      ) : boardQuery.isError || !boardQuery.data ? (
+      ) : !boardQuery.data ? (
         <Text className="font-sans text-[13px] leading-[19px] text-dispute">
-          Couldn&rsquo;t load the bracket. Pull to retry in a moment.
+          Couldn&rsquo;t load the bracket. Pull down to retry.
         </Text>
       ) : (
         <>

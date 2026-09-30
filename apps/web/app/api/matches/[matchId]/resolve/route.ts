@@ -1,5 +1,7 @@
 // POST /api/matches/:matchId/resolve — A-12: an admin settling a match's
-// result from any state, overriding whatever the teams reported.
+// result from any state, overriding whatever the teams reported — including
+// an already-CONFIRMED match (correcting a wrong result). Only the platform
+// admin can do that once the tournament is COMPLETE.
 //
 // Runs through the exact same transition() from @beermacs/shared that a
 // captain's report/confirm would — there is no separate "admin path" logic to
@@ -14,9 +16,12 @@ import { handleError, parseBody } from "@/lib/http";
 import {
   advanceWinnerToNextRound,
   MATCH_STATE_TO_PRISMA,
+  retractWinnerFromNextRound,
+  updateMatchFrom,
   toDomainMatch,
 } from "@/lib/match-mapping";
 import { sendNotifyIntents } from "@/lib/notify";
+import { isAdminSession } from "@/lib/admin-cookie";
 import { HttpError, requireVenueRoleForMatch } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -47,7 +52,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
         tournament: { select: { venueId: true, status: true } },
       },
     });
-    if (row.tournament.status === "COMPLETE") throw new HttpError(409, "tournament_ended");
+    if (row.tournament.status === "COMPLETE" && !(await isAdminSession())) {
+      throw new HttpError(409, "tournament_ended");
+    }
     const domainMatch = toDomainMatch(row.roundId, row);
 
     const outcome = transition(
@@ -73,17 +80,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
 
     const { match: settled, releasesTable, notify } = outcome.value;
 
+    const winnerChanged = row.state === "CONFIRMED" && row.winnerTeamId !== settled.winnerId;
+
     await prisma.$transaction(async (tx) => {
-      await tx.match.update({
-        where: { id: matchId },
-        data: {
+      if (winnerChanged) await retractWinnerFromNextRound(tx, row);
+      await updateMatchFrom(tx, matchId, row.state, {
           state: MATCH_STATE_TO_PRISMA[settled.state],
           winnerTeamId: settled.winnerId,
           homeScore: settled.score?.home ?? null,
           awayScore: settled.score?.away ?? null,
           venueTableId: settled.tableId,
           settledAt: new Date(),
-        },
       });
       if (releasesTable) {
         await tx.venueTable.update({ where: { id: releasesTable }, data: { state: "OPEN" } });

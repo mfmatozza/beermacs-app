@@ -10,7 +10,15 @@ import { api, type MeResponse } from "./api";
 export function useCurrentTeam() {
   const meQuery = useQuery({ queryKey: ["me"], queryFn: api.me });
   const myTeam = firstActiveTeam(meQuery.data);
-  return { myTeam, isLoading: meQuery.isLoading, me: meQuery.data };
+  return {
+    myTeam,
+    isLoading: meQuery.isLoading,
+    // Only a failure with nothing cached — so a screen can say "couldn't
+    // load" instead of mistaking it for "not in a tournament".
+    isError: meQuery.isError && !meQuery.data,
+    refetch: meQuery.refetch,
+    me: meQuery.data,
+  };
 }
 
 function firstActiveTeam(me: MeResponse | undefined) {

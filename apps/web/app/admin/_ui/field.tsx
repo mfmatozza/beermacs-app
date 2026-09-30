@@ -6,7 +6,7 @@ import type {
 } from "react";
 
 const base =
-  "w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 outline-none transition-colors focus:border-beer-500 disabled:opacity-50";
+  "w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 outline-none transition-colors focus:border-beer-500 focus-visible:ring-2 focus-visible:ring-beer-500/30 disabled:opacity-50";
 
 export function Field({
   label,
@@ -57,8 +57,10 @@ export function Toggle({
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 px-4 py-3 text-left transition-colors hover:bg-gray-50"
+      className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 px-4 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-beer-500/50"
     >
       <span>
         <span className="block text-sm font-medium text-gray-800">{label}</span>

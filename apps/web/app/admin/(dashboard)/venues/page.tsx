@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdminPage } from "@/lib/admin-session";
 import { prisma } from "@beermacs/db";
 import { EmptyState } from "../../_ui/empty-state";
 import { StoreIcon } from "../../_ui/icons";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 const fmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 export default async function VenuesPage() {
+  await requireAdminPage();
   const venues = await prisma.venue.findMany({
     where: { deletedAt: null },
     orderBy: { createdAt: "desc" },

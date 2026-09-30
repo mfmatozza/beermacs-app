@@ -137,12 +137,11 @@ export function MailIcon(props: IconProps) {
 }
 
 /** Beer cups — a live/on-table match. */
-export function CupsIcon(props: IconProps) {
+export function LockIcon(props: IconProps) {
   return (
     <svg {...base(props)} aria-hidden="true">
-      <path d="M6 4h5l-.6 8a2 2 0 0 1-2 1.8h-.8A2 2 0 0 1 5.6 12L5 4Z" />
-      <path d="M13 8h5l-.5 5.5a1.7 1.7 0 0 1-1.7 1.5h-.6a1.7 1.7 0 0 1-1.7-1.5L13 8Z" />
-      <path d="M4 20h9M14.5 20h4.5" />
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
     </svg>
   );
 }

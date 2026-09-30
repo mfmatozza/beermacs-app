@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdminPage } from "@/lib/admin-session";
 import { prisma } from "@beermacs/db";
 import { Badge } from "../../_ui/badge";
 import { EmptyState } from "../../_ui/empty-state";
@@ -20,14 +21,27 @@ const fmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", y
 export default async function TournamentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
-  const { status: rawStatus } = await searchParams;
+  await requireAdminPage();
+  const { status: rawStatus, q } = await searchParams;
+  const query = q?.trim() ?? "";
   const STATUSES = ["DRAFT", "REGISTRATION", "RUNNING", "COMPLETE", "CANCELED"] as const;
   const status = STATUSES.find((s) => s === rawStatus);
 
   const tournaments = await prisma.tournament.findMany({
-    where: status ? { status } : undefined,
+    where: {
+      ...(status ? { status } : {}),
+      ...(query
+        ? {
+            OR: [
+              { name: { contains: query, mode: "insensitive" as const } },
+              { joinCode: { equals: query.toUpperCase() } },
+              { venue: { name: { contains: query, mode: "insensitive" as const } } },
+            ],
+          }
+        : {}),
+    },
     orderBy: { createdAt: "desc" },
     take: 200,
     select: {
@@ -44,7 +58,21 @@ export default async function TournamentsPage({
 
   return (
     <>
-      <PageHeader title="Tournaments" subtitle="Every tournament, across every venue." />
+      <PageHeader title="Tournaments" subtitle="Every tournament, across every venue. Newest 200 shown; search for older." />
+
+      <form method="GET" className="mb-3 flex gap-2">
+        {status ? <input type="hidden" name="status" value={status} /> : null}
+        <input
+          name="q"
+          defaultValue={query}
+          placeholder="Name, venue or join code…"
+          aria-label="Search tournaments"
+          className="w-full max-w-sm rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 outline-none focus:border-beer-500 focus-visible:ring-2 focus-visible:ring-beer-500/30"
+        />
+        <button type="submit" className="rounded-xl bg-beer-500 px-4 py-2.5 text-sm font-semibold text-stout-900">
+          Search
+        </button>
+      </form>
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Link

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run generate -w @beermacs/db && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"

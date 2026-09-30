@@ -30,12 +30,14 @@ export default function HistoryTab() {
     >
       <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">History</Text>
 
-      {historyQuery.isLoading || !historyQuery.data ? (
-        <ActivityIndicator color={raw.beer} />
-      ) : historyQuery.isError ? (
-        <Text className="font-sans text-[13px] text-dispute">
-          Couldn&rsquo;t load your history. Check your connection.
-        </Text>
+      {!historyQuery.data ? (
+        historyQuery.isError ? (
+          <Text className="font-sans text-[13px] text-dispute">
+            Couldn&rsquo;t load your history. Check your connection.
+          </Text>
+        ) : (
+          <ActivityIndicator color={raw.beer} />
+        )
       ) : historyQuery.data.entries.length === 0 ? (
         <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
           No finished tournaments yet — this fills in once one you played in ends.

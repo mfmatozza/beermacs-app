@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import * as Linking from "expo-linking";
+import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, api, type ChatMessage } from "../../lib/api";
+import { API_URL } from "../../lib/config";
 import { raw, TAB_BAR_HEIGHT } from "../../lib/theme";
 import { useCurrentTeam } from "../../lib/use-current-team";
 
@@ -24,7 +26,8 @@ const STAFF_ROLES = new Set(["VENUE_STAFF", "VENUE_ADMIN", "VENUE_OWNER"]);
  * Chat (U-8/U-9/U-10) — three channels and no more, per the spec: everyone
  * playing tonight, the match currently on a table, and messages from the
  * bar. Ships with the moderation kit App Store guideline 1.2 requires
- * before user-generated content can go live: report, block, staff-mute.
+ * before user-generated content can go live: report, block, staff-mute, and
+ * a way to contact us ("Report a problem" in the header → the support page).
  *
  * Functional, not yet styled to a final direction — reusing this app's
  * existing tokens as-is rather than inventing a new look here.
@@ -36,6 +39,7 @@ export default function ChatTab() {
   const [tab, setTab] = useState<Tab>("tournament");
   const [draft, setDraft] = useState("");
   const queryClient = useQueryClient();
+  const scrollRef = useRef<ScrollView>(null);
 
   const isStaff = useMemo(() => {
     if (!myTeam || !me) return false;
@@ -136,7 +140,18 @@ export default function ChatTab() {
       keyboardVerticalOffset={insets.top}
     >
       <View style={{ paddingTop: insets.top + 12 }} className="gap-3 px-4">
-        <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">Chat</Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">Chat</Text>
+          <Pressable
+            onPress={() => void Linking.openURL(`${API_URL}/support`)}
+            accessibilityRole="link"
+            accessibilityLabel="Report a problem"
+            hitSlop={12}
+            className="py-2"
+          >
+            <Text className="font-sans-med text-[12px] text-beer-400">Report a problem</Text>
+          </Pressable>
+        </View>
         <View className="flex-row gap-2">
           <TabButton
             label="Everyone"
@@ -161,6 +176,8 @@ export default function ChatTab() {
       ) : (
         <>
           <ScrollView
+            ref={scrollRef}
+            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
             className="flex-1 px-4"
             contentContainerClassName="gap-3 py-4"
             showsVerticalScrollIndicator={false}
@@ -173,7 +190,7 @@ export default function ChatTab() {
               </Text>
             ) : activeQuery.isError || !activeQuery.data ? (
               <Text className="font-sans text-[13px] leading-[19px] text-dispute">
-                Couldn&rsquo;t load chat. Pull to retry in a moment.
+                Couldn&rsquo;t load chat. Retrying automatically&hellip;
               </Text>
             ) : "messages" in activeQuery.data && activeQuery.data.messages.length === 0 ? (
               <Text className="font-sans text-[13px] leading-[19px] text-cream-dim">
@@ -187,9 +204,27 @@ export default function ChatTab() {
                   isStaff={isStaff}
                   isMine={m.authorId !== null && m.authorId === me?.user.id}
                   onReport={() => reportMutation.mutate(m.id)}
-                  onBlock={() => m.authorId && blockMutation.mutate(m.authorId)}
-                  onMute={() => m.authorId && muteMutation.mutate(m.authorId)}
-                  onDelete={() => deleteMutation.mutate(m.id)}
+                  onBlock={() =>
+                    confirmThen(
+                      `Block ${m.authorName ?? "this person"}?`,
+                      "You won't see their messages any more.",
+                      "Block",
+                      () => m.authorId && blockMutation.mutate(m.authorId)
+                    )
+                  }
+                  onMute={() =>
+                    confirmThen(
+                      `Mute ${m.authorName ?? "this person"}?`,
+                      "They won't be able to post in this tournament's chat.",
+                      "Mute",
+                      () => m.authorId && muteMutation.mutate(m.authorId)
+                    )
+                  }
+                  onDelete={() =>
+                    confirmThen("Delete this message?", "It's removed for everyone.", "Delete", () =>
+                      deleteMutation.mutate(m.id)
+                    )
+                  }
                 />
               ))
             ) : null}
@@ -205,6 +240,7 @@ export default function ChatTab() {
                 onChangeText={setDraft}
                 placeholder="Message..."
                 placeholderTextColor={raw.textFaint}
+                accessibilityLabel="Message"
                 multiline
                 className="max-h-[100px] flex-1 rounded-lg border border-stout-500 bg-stout-850 px-3 py-2 text-[14px] text-cream"
               />
@@ -229,6 +265,13 @@ export default function ChatTab() {
       )}
     </KeyboardAvoidingView>
   );
+}
+
+function confirmThen(title: string, message: string, action: string, onConfirm: () => void) {
+  Alert.alert(title, message, [
+    { text: "Cancel", style: "cancel" },
+    { text: action, style: "destructive", onPress: onConfirm },
+  ]);
 }
 
 function TabButton({
@@ -298,11 +341,12 @@ function MessageRow({
       </View>
       <Text className="font-sans text-[14px] leading-[20px] text-cream">{message.body}</Text>
       {message.authorId && (!isMine || isStaff) ? (
-        <View className="mt-1 flex-row gap-4">
+        <View className="mt-1 flex-row gap-6 py-1">
           {!isMine ? (
             <>
               <Pressable
                 onPress={onReport}
+                hitSlop={12}
                 accessibilityRole="button"
                 accessibilityLabel="Report message"
               >
@@ -310,7 +354,12 @@ function MessageRow({
                   {message.flaggedAt ? "Reported" : "Report"}
                 </Text>
               </Pressable>
-              <Pressable onPress={onBlock} accessibilityRole="button" accessibilityLabel="Block user">
+              <Pressable
+                onPress={onBlock}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Block user"
+              >
                 <Text className="font-sans-med text-[11px] uppercase tracking-[0.6px] text-cream-faint">
                   Block
                 </Text>
@@ -320,7 +369,12 @@ function MessageRow({
           {isStaff ? (
             <>
               {!isMine ? (
-                <Pressable onPress={onMute} accessibilityRole="button" accessibilityLabel="Mute user">
+                <Pressable
+                  onPress={onMute}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mute user"
+                >
                   <Text className="font-sans-med text-[11px] uppercase tracking-[0.6px] text-notice">
                     Mute
                   </Text>
@@ -328,6 +382,7 @@ function MessageRow({
               ) : null}
               <Pressable
                 onPress={onDelete}
+                hitSlop={12}
                 accessibilityRole="button"
                 accessibilityLabel="Delete message"
               >

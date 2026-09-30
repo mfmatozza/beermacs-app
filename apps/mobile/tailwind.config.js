@@ -47,7 +47,9 @@ module.exports = {
         cream: {
           DEFAULT: "#F1EADB",
           dim: "#A89D8A",
-          faint: "#6E6555",
+          // Same as theme.ts's textFaint — 5.1:1 on stout-900. The old
+          // #6E6555 was 3.5:1, under WCAG AA for the 11px labels it's used on.
+          faint: "#8A8070",
         },
         // Match state. Deliberately off the amber axis so state never reads as
         // brand: a green pill means "in play", not "on brand".

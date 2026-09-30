@@ -44,6 +44,8 @@ export default function DisputesSection({
       className="flex-1"
       contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 40 }}
       contentContainerClassName="gap-4 px-4"
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
     >
       {boardQuery.isLoading ? (
         <ActivityIndicator color={raw.beer} />

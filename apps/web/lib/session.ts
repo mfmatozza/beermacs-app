@@ -15,7 +15,7 @@ export interface Viewer {
   readonly userId: string;
   readonly displayName: string;
   readonly email: string;
-  readonly phone: string;
+  readonly phone: string | null;
   readonly image: string | null;
 }
 
@@ -26,12 +26,16 @@ export async function currentViewer(): Promise<Viewer | null> {
   const u = session.user as typeof session.user & {
     displayName?: string | null;
     phone?: string | null;
+    bannedAt?: Date | null;
   };
+  // Belt and braces: banning deletes sessions, but a cached one must not
+  // outlive it.
+  if (u.bannedAt) return null;
   return {
     userId: u.id,
     displayName: u.displayName ?? u.name ?? "Player",
     email: u.email,
-    phone: u.phone ?? "",
+    phone: u.phone || null,
     image: u.image ?? null,
   };
 }
@@ -50,8 +54,10 @@ const RANK: Record<Role, number> = {
 
 /** This user's role at this venue, or null if they are not a member. */
 export async function roleAtVenue(userId: string, venueId: string): Promise<Role | null> {
-  const m = await prisma.venueMembership.findUnique({
-    where: { userId_venueId: { userId, venueId } },
+  // A soft-deleted venue grants nothing — otherwise its staff keep full
+  // write access to a venue the platform admin removed.
+  const m = await prisma.venueMembership.findFirst({
+    where: { userId, venueId, venue: { deletedAt: null } },
     select: { role: true },
   });
   return m?.role ?? null;
@@ -142,7 +148,7 @@ export async function requireVenueRole(venueId: string, atLeast: Role): Promise<
  */
 async function adminViewer(): Promise<Viewer> {
   const u = await upsertAdminUser();
-  return { userId: u.id, displayName: u.displayName, email: u.email, phone: "", image: null };
+  return { userId: u.id, displayName: u.displayName, email: u.email, phone: null, image: null };
 }
 
 /**

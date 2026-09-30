@@ -23,6 +23,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ messag
       select: {
         id: true,
         flaggedAt: true,
+        body: true,
+        author: { select: { displayName: true } },
         channel: {
           select: {
             tournamentId: true,
@@ -52,10 +54,23 @@ export async function POST(_req: Request, { params }: { params: Promise<{ messag
     }
 
     if (!message.flaggedAt) {
-      await prisma.chatMessage.update({
-        where: { id: messageId },
-        data: { flaggedAt: new Date() },
-      });
+      // Also lands in the platform support inbox: guideline 1.2 expects the
+      // developer, not just the venue, to see and act on reports.
+      const who = message.author?.displayName ?? "a deleted user";
+      await prisma.$transaction([
+        prisma.chatMessage.update({ where: { id: messageId }, data: { flaggedAt: new Date() } }),
+        prisma.supportMessage.create({
+          data: {
+            userId: viewer.userId,
+            name: viewer.displayName,
+            email: viewer.email,
+            source: "CHAT_REPORT",
+            body: `Reported chat message by ${who} (message ${messageId}):
+
+${message.body.slice(0, 1000)}`,
+          },
+        }),
+      ]);
     }
 
     return NextResponse.json({ id: messageId, flagged: true });

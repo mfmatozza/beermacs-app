@@ -1,15 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { isCompleteJoinCode, joinCodeLength, normaliseJoinCode } from "@beermacs/shared";
-import { ApiError, type MeResponse, api } from "../lib/api";
+import { type MeResponse, api } from "../lib/api";
 import { usePendingTournamentStore } from "../lib/pending-tournament";
 import { raw, TAB_BAR_HEIGHT } from "../lib/theme";
-import { findMyNextUp, toNextUpState } from "../lib/next-up";
 import { useCurrentTeam } from "../lib/use-current-team";
 import { useJoinTournament } from "../lib/use-join-tournament";
+import { useNextUp } from "../lib/use-next-up";
 import AmbientBeer from "./AmbientBeer";
 import GlowLogo from "./GlowLogo";
 import NextUpCard from "./NextUpCard";
@@ -25,28 +25,9 @@ import NextUpCard from "./NextUpCard";
  * on the Bracket tab in detail but gets its own summary card here so a player
  * never has to leave Home to see whether they're up.
  */
-/** Report/confirm/dispute all fail with the same `kind` strings the shared
- *  approval state machine returns (packages/shared/src/approval.ts) — one
- *  mapping for all three rather than three near-identical switch statements. */
-function matchActionErrorMessage(e: unknown): string {
-  if (!(e instanceof ApiError)) return "Check your connection and try again.";
-  switch (e.code) {
-    case "self_confirmation":
-      return "You can't confirm your own report — the other team needs to.";
-    case "wrong_state":
-      return "This match has already moved on. Pull to refresh and try again.";
-    case "tournament_ended":
-      return "This tournament has already ended.";
-    case "implausible_score":
-      return "That score doesn't add up for this format.";
-    default:
-      return "Try again in a moment.";
-  }
-}
-
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { myTeam, me, isLoading: meLoading } = useCurrentTeam();
+  const { myTeam, me, isLoading: meLoading, isError: meError, refetch } = useCurrentTeam();
   const pending = usePendingTournamentStore((s) => s.pending);
   const hydrated = usePendingTournamentStore((s) => s.hydrated);
   const setPending = usePendingTournamentStore((s) => s.setPending);
@@ -67,6 +48,21 @@ export default function HomeScreen() {
       {loading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={raw.beer} />
+        </View>
+      ) : meError ? (
+        <View className="flex-1 items-center justify-center gap-4 px-5">
+          <Text className="text-center font-sans text-[13px] leading-[19px] text-dispute">
+            Couldn&rsquo;t reach the server. Check your connection.
+          </Text>
+          <Pressable
+            onPress={() => void refetch()}
+            accessibilityRole="button"
+            className="min-h-[44px] items-center justify-center rounded-lg border border-stout-500 px-6 active:opacity-70"
+          >
+            <Text className="font-sans-med text-[13px] uppercase tracking-[0.8px] text-cream">
+              Try again
+            </Text>
+          </Pressable>
         </View>
       ) : myTeam ? (
         <ActiveTournamentHome myTeam={myTeam} insets={insets} />
@@ -331,7 +327,6 @@ function ActiveTournamentHome({
   myTeam: NonNullable<ReturnType<typeof useCurrentTeam>["myTeam"]>;
   insets: { top: number; bottom: number };
 }) {
-  const queryClient = useQueryClient();
   const tournamentId = myTeam.team.tournament.id;
 
   const boardQuery = useQuery({
@@ -345,53 +340,7 @@ function ActiveTournamentHome({
     refetchInterval: 15000,
   });
 
-  const invalidateBoard = () => {
-    void queryClient.invalidateQueries({ queryKey: ["board", tournamentId] });
-  };
-  const reportMutation = useMutation({
-    mutationFn: (vars: { matchId: string; winnerId: string }) =>
-      api.reportMatch(vars.matchId, { winnerId: vars.winnerId }),
-    onSuccess: invalidateBoard,
-    onError: (e) => Alert.alert("Couldn't report the score", matchActionErrorMessage(e)),
-  });
-  const confirmMutation = useMutation({
-    mutationFn: (matchId: string) => api.confirmMatch(matchId),
-    onSuccess: invalidateBoard,
-    onError: (e) => Alert.alert("Couldn't confirm", matchActionErrorMessage(e)),
-  });
-  const rejectMutation = useMutation({
-    mutationFn: (matchId: string) => api.rejectMatch(matchId, {}),
-    onSuccess: invalidateBoard,
-    onError: (e) => Alert.alert("Couldn't dispute", matchActionErrorMessage(e)),
-  });
-
-  const mine = useMemo(() => {
-    if (!boardQuery.data) return null;
-    return findMyNextUp(boardQuery.data.stages, myTeam.team.id);
-  }, [boardQuery.data, myTeam.team.id]);
-
-  const nextUpState = useMemo(() => {
-    if (!mine) return null;
-    return toNextUpState(mine, myTeam.team.id, {
-      reporting: reportMutation.isPending,
-      confirmBusy: confirmMutation.isPending || rejectMutation.isPending,
-      onReport: (winnerIsMe) => {
-        if (mine.kind !== "match") return;
-        const opponentTeamId =
-          mine.match.home?.teamId === myTeam.team.id
-            ? mine.match.away?.teamId
-            : mine.match.home?.teamId;
-        const winnerId = winnerIsMe ? myTeam.team.id : (opponentTeamId ?? myTeam.team.id);
-        reportMutation.mutate({ matchId: mine.match.id, winnerId });
-      },
-      onConfirm: () => {
-        if (mine.kind === "match") confirmMutation.mutate(mine.match.id);
-      },
-      onDispute: () => {
-        if (mine.kind === "match") rejectMutation.mutate(mine.match.id);
-      },
-    });
-  }, [mine, myTeam.team.id, reportMutation, confirmMutation, rejectMutation]);
+  const { mine, nextUpState } = useNextUp(tournamentId, myTeam.team.id, boardQuery.data);
 
   const latestStaffMessage = staffQuery.data?.messages.at(-1) ?? null;
 
@@ -416,6 +365,12 @@ function ActiveTournamentHome({
 
       {boardQuery.isLoading ? (
         <ActivityIndicator color={raw.beer} />
+      ) : !boardQuery.data ? (
+        <View className="gap-1 rounded-2xl border border-dispute/50 bg-dispute/10 p-4">
+          <Text className="font-sans text-[13px] leading-[19px] text-dispute">
+            Couldn&rsquo;t load the board. Retrying automatically&hellip;
+          </Text>
+        </View>
       ) : nextUpState && mine ? (
         <NextUpCard state={nextUpState} roundIndex={mine.roundIndex} />
       ) : (

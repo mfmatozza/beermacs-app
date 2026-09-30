@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireAdminPage } from "@/lib/admin-session";
 import { Prisma, prisma } from "@beermacs/db";
 import { TournamentAdminPanel } from "./tournament-admin-panel";
 
@@ -47,11 +48,23 @@ const TOURNAMENT_SELECT = {
               state: true,
               homeTeam: { select: { id: true, name: true } },
               awayTeam: { select: { id: true, name: true } },
+              winner: { select: { name: true } },
               venueTable: { select: { label: true } },
             },
           },
         },
       },
+    },
+  },
+  auditEntries: {
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      action: true,
+      reason: true,
+      createdAt: true,
+      actor: { select: { displayName: true } },
     },
   },
 } satisfies Prisma.TournamentSelect;
@@ -68,6 +81,7 @@ export type TournamentAdminData = Prisma.TournamentGetPayload<{ select: typeof T
  * "open a round" or "resolve a dispute," not two that can drift.
  */
 export default async function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const { id } = await params;
   const tournament = await prisma.tournament.findUnique({ where: { id }, select: TOURNAMENT_SELECT });
   if (!tournament) notFound();

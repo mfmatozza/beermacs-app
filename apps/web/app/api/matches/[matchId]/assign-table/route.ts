@@ -10,7 +10,7 @@ import { Role, prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
 import { ensureMatchChatChannel } from "@/lib/chat-triggers";
-import { MATCH_STATE_TO_PRISMA, toDomainMatch } from "@/lib/match-mapping";
+import { MATCH_STATE_TO_PRISMA, toDomainMatch, updateMatchFrom } from "@/lib/match-mapping";
 import { sendNotifyIntents } from "@/lib/notify";
 import { HttpError, requireVenueRoleForMatch } from "@/lib/session";
 
@@ -62,13 +62,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     if (!outcome.ok) throw new HttpError(422, outcome.error.kind);
     const { match: next, notify } = outcome.value;
 
-    await prisma.$transaction([
-      prisma.match.update({
-        where: { id: matchId },
-        data: { state: MATCH_STATE_TO_PRISMA[next.state], venueTableId: next.tableId },
-      }),
-      prisma.venueTable.update({ where: { id: body.tableId }, data: { state: "BUSY" } }),
-    ]);
+    // Both writes conditional: the table must still be OPEN and the match
+    // still in the state we read, or two staff phones could put two matches
+    // on one table (or one match on two).
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.venueTable.updateMany({
+        where: { id: body.tableId, state: "OPEN" },
+        data: { state: "BUSY" },
+      });
+      if (claimed.count === 0) throw new HttpError(409, "table_not_open");
+      await updateMatchFrom(tx, matchId, row.state, {
+        state: MATCH_STATE_TO_PRISMA[next.state],
+        venueTableId: next.tableId,
+      });
+    });
 
     await sendNotifyIntents(notify, { venueId: row.tournament.venueId, tableLabel: table.label });
     const chatEnabled = (row.tournament.config as { chatEnabled?: boolean })?.chatEnabled ?? false;

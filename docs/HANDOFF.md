@@ -30,15 +30,16 @@ what's pending, what you need to know before touching it again."
 
 ## Credentials
 
-- **Platform admin** (`https://app.beermacs.com/admin`): `admin` /
-  `G7xMT8UxdwSZto_-`
-- **App Review demo account** (for Apple, or for testing): `review@beermacs.com`
-  / `AppleReview2026!` — on team "The Reviewers" in a live, running
-  tournament "Porter House Open" (vs "House Team", on Table 1 at Porter
-  House). Also has venue-owner access, so it can reach `/admin` in the
-  mobile app too. Deliberately real and honestly-named (not joke data) —
-  this one is meant to stay, unlike the elaborate screenshot-only bracket
-  that was seeded and deleted this session.
+**Never in this repo** — it was public, and the passwords that used to be
+written here were exposed and have been rotated. Keep them in a password
+manager.
+
+- **Platform admin** (`https://app.beermacs.com/admin`): generate with
+  `node apps/web/scripts/create-admin.mjs`, set the three `ADMIN_*` env vars
+  on Vercel. 10 failed logins lock that IP; unlock under Admin → Security.
+- **App Review demo account**: `review@beermacs.com`, password set by running
+  the seed (`REVIEW_PASSWORD=… npm run seed -w @beermacs/db`) — see
+  `docs/APP_STORE_COMPLIANCE.md`, "Resubmission runbook".
 
 ## App Store Connect — copy ready to paste
 

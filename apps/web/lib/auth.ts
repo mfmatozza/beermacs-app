@@ -3,8 +3,9 @@
 // SERVER-ONLY. Never import from a client component.
 //
 // One door in, per docs/DECISIONS.md D10: every account — player or staff —
-// registers with email + password + phone. Phone is stored contact data
-// (G-2/A-21), never a second factor; there is no SMS OTP anywhere in this app.
+// registers with email + password; phone is optional contact data (A-21) —
+// App Review rejected build 11 for requiring it (5.1.1(v)). Never a second
+// factor; there is no SMS OTP anywhere in this app.
 // The earlier anonymous-player / staff-only-email split (D3, then D9) is
 // fully retired, not just unrouted — the plugin is gone.
 //
@@ -14,10 +15,12 @@
 
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError } from "better-auth/api";
 import { bearer } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { prisma } from "@beermacs/db";
 import { sendEmail } from "./email";
+import { scrubUserPii } from "./users";
 
 function buildAuth() {
   if (!process.env.BETTER_AUTH_SECRET) {
@@ -32,7 +35,7 @@ function buildAuth() {
   return betterAuth({
     database: prismaAdapter(prisma, { provider: "postgresql" }),
     secret: process.env.BETTER_AUTH_SECRET,
-    baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+    baseURL: authBaseUrl(),
 
     // The mobile app's scheme, so Better Auth accepts its redirects.
     trustedOrigins: ["beermacs://", "beermacs://*"],
@@ -62,9 +65,11 @@ function buildAuth() {
       additionalFields: {
         // The app shows `displayName`; Better Auth only knows about `name`.
         displayName: { type: "string", required: true, input: true },
-        // G-1: mandatory for every account, not just staff. Stored as data
-        // (A-21), never used to authenticate — see the module doc above.
-        phone: { type: "string", required: true, input: true },
+        // Optional (App Review 5.1.1(v)). Stored as data (A-21), never used
+        // to authenticate — see the module doc above.
+        phone: { type: "string", required: false, input: true },
+        // Read by lib/session.ts to refuse a banned user's live sessions.
+        bannedAt: { type: "date", required: false, input: false },
       },
       // App Store guideline 5.1.1(v): account deletion must be reachable
       // INSIDE the app, not "email us." This is that mechanism — DELETE
@@ -79,8 +84,48 @@ function buildAuth() {
       },
     },
 
+    // The in-memory default is per serverless instance, i.e. barely a limit
+    // on Vercel. The `RateLimit` table (packages/db) makes it global.
+    rateLimit: { enabled: true, storage: "database" },
+
+    databaseHooks: {
+      user: {
+        // A cleared phone must be NULL, not "", so "no phone" means one
+        // thing everywhere.
+        create: { before: async (user) => ({ data: { ...user, phone: blankToNull(user.phone) } }) },
+        update: {
+          before: async (user) =>
+            "phone" in user ? { data: { ...user, phone: blankToNull(user.phone) } } : { data: user },
+        },
+        delete: { before: async (user) => void (await scrubUserPii(user.id)) },
+      },
+      session: {
+        // Banned from /admin/users: no new sessions, whatever the method.
+        create: {
+          before: async (session) => {
+            const u = await prisma.user.findUnique({
+              where: { id: session.userId },
+              select: { bannedAt: true },
+            });
+            if (u?.bannedAt) throw new APIError("FORBIDDEN", { message: "account_banned" });
+          },
+        },
+      },
+    },
+
     plugins: [bearer(), expo()],
   });
+}
+
+function blankToNull(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+function authBaseUrl(): string {
+  const url = process.env.BETTER_AUTH_URL;
+  // A missing URL in production silently mints reset links to localhost.
+  if (!url && process.env.NODE_ENV === "production") throw new Error("BETTER_AUTH_URL is not set.");
+  return url ?? "http://localhost:3000";
 }
 
 type BetterAuthInstance = ReturnType<typeof buildAuth>;

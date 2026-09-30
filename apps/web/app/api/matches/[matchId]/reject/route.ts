@@ -8,7 +8,12 @@ import { rejectResultInput, transition } from "@beermacs/shared";
 import { prisma } from "@beermacs/db";
 import { NextResponse } from "next/server";
 import { handleError, parseBody } from "@/lib/http";
-import { getPendingReport, MATCH_STATE_TO_PRISMA, toDomainMatch } from "@/lib/match-mapping";
+import {
+  getPendingReport,
+  MATCH_STATE_TO_PRISMA,
+  toDomainMatch,
+  updateMatchFrom,
+} from "@/lib/match-mapping";
 import { sendNotifyIntents } from "@/lib/notify";
 import { HttpError, requireViewer, resolveMatchActor } from "@/lib/session";
 
@@ -64,12 +69,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     if (!outcome.ok) throw new HttpError(422, outcome.error.kind);
     const { match: next, notify } = outcome.value;
 
-    await prisma.$transaction([
-      prisma.match.update({
-        where: { id: matchId },
-        data: { state: MATCH_STATE_TO_PRISMA[next.state] },
-      }),
-      prisma.matchReport.create({
+    await prisma.$transaction(async (tx) => {
+      await updateMatchFrom(tx, matchId, row.state, { state: MATCH_STATE_TO_PRISMA[next.state] });
+      await tx.matchReport.create({
         data: {
           matchId,
           kind: "REJECT",
@@ -77,8 +79,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
           teamId: actor.kind === "captain" ? actor.teamId : null,
           reason: body.reason,
         },
-      }),
-    ]);
+      });
+    });
 
     await sendNotifyIntents(notify, { venueId: row.tournament.venueId });
 

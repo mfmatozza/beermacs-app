@@ -1,5 +1,6 @@
 import type { TournamentFormatKind } from "@beermacs/shared";
 import { Ionicons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -19,7 +20,7 @@ const FORMATS: { kind: TournamentFormatKind; label: string; detail: string }[] =
   {
     kind: "single_elimination",
     label: "Single elimination",
-    detail: "Lose once, you're out. The standard case (A-5).",
+    detail: "Lose once, you're out. The standard case.",
   },
   {
     kind: "group_then_knockout",
@@ -42,6 +43,7 @@ const FORMATS: { kind: TournamentFormatKind; label: string; detail: string }[] =
 export default function CreateTournamentScreen() {
   const insets = useSafeAreaInsets();
   const { venueId } = useLocalSearchParams<{ venueId: string }>();
+  const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
   const [format, setFormat] = useState<TournamentFormatKind>("single_elimination");
@@ -98,6 +100,7 @@ export default function CreateTournamentScreen() {
         tableLabels: cleanTables,
       });
       setCreated({ joinCode: result.joinCode });
+      void queryClient.invalidateQueries({ queryKey: ["venue-tournaments", venueId] });
     } catch (e) {
       setError(
         e instanceof ApiError && e.code === "insufficient_role"
@@ -107,7 +110,7 @@ export default function CreateTournamentScreen() {
     } finally {
       setBusy(false);
     }
-  }, [venueId, name, format, playersPerTeam, chatEnabled, scored, cupsToWin, tables]);
+  }, [venueId, name, format, playersPerTeam, chatEnabled, scored, cupsToWin, tables, queryClient]);
 
   if (created) {
     return (
@@ -124,10 +127,12 @@ export default function CreateTournamentScreen() {
           {created.joinCode}
         </Text>
         <Text className="max-w-[280px] text-center font-sans text-[13px] leading-[19px] text-cream-dim">
-          Print this on the table tent. Round control and team management land next.
+          Print this on the table tent. Open the tournament from your venues to add teams and
+          start rounds.
         </Text>
         <Pressable
           onPress={() => router.back()}
+          accessibilityRole="button"
           className="mt-4 min-h-[48px] items-center justify-center rounded-lg bg-beer-500 px-8 active:opacity-70"
         >
           <Text className="font-display text-xl uppercase tracking-[0.8px] text-stout-900">
@@ -144,10 +149,22 @@ export default function CreateTournamentScreen() {
       contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }}
       contentContainerClassName="gap-6 px-4"
       keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
     >
-      <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
-        New tournament
-      </Text>
+      <View className="flex-row items-center gap-2">
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/admin"))}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Back to your venues"
+          className="active:opacity-60"
+        >
+          <Ionicons name="chevron-back" size={22} color="#F1EADB" />
+        </Pressable>
+        <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
+          New tournament
+        </Text>
+      </View>
 
       <Field label="Name" value={name} onChangeText={setName} placeholder="Friday Night Cups" />
 
@@ -199,11 +216,13 @@ export default function CreateTournamentScreen() {
                 value={t}
                 onChangeText={(v) => setTables((prev) => prev.map((x, idx) => (idx === i ? v : x)))}
                 placeholderTextColor={raw.textFaint}
+                accessibilityLabel={`Table ${i + 1} name`}
                 className="flex-1 rounded-lg border border-stout-500 bg-stout-900/70 px-3 py-2.5 font-sans text-[14px] text-cream"
               />
               <Pressable
                 onPress={() => removeTable(i)}
                 hitSlop={8}
+                accessibilityRole="button"
                 accessibilityLabel={`Remove ${t}`}
                 className="p-2"
               >
@@ -274,6 +293,7 @@ function ToggleRow({
         value={value}
         onValueChange={onChange}
         trackColor={{ false: raw.hairline, true: raw.beer }}
+        accessibilityLabel={label}
       />
     </View>
   );

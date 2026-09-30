@@ -90,6 +90,8 @@ export default function SettingsSection({
       className="flex-1"
       contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 40 }}
       contentContainerClassName="gap-4 px-4"
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
     >
       <Field
         label="Players per team"

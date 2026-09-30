@@ -49,12 +49,18 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-font",
-    "expo-secure-store",
+    // No biometric-gated items — without `false` the plugin writes a generic
+    // Face ID purpose string for a permission the app never asks for.
+    ["expo-secure-store", { faceIDPermission: false }],
     "expo-notifications",
     [
       "expo-image-picker",
       {
         photosPermission: "Beermacs uses your photo library to set your profile picture.",
+        // The app never uses the camera or mic — without these the plugin
+        // writes its generic default purpose strings into Info.plist anyway.
+        cameraPermission: false,
+        microphonePermission: false,
       },
     ],
     [

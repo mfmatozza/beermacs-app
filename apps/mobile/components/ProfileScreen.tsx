@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -18,9 +19,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, type MeResponse } from "../lib/api";
 import { authClient } from "../lib/auth-client";
+import { API_URL } from "../lib/config";
+import { usePendingTournamentStore } from "../lib/pending-tournament";
 import { useSessionStore } from "../lib/session-store";
 import { raw, TAB_BAR_HEIGHT } from "../lib/theme";
-import { networkErrorMessage, withTimeout } from "../lib/with-timeout";
+import { networkErrorMessage } from "../lib/with-timeout";
 
 /**
  * Account, stats, notification preferences, security, sign-out, and
@@ -37,6 +40,8 @@ import { networkErrorMessage, withTimeout } from "../lib/with-timeout";
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const setSignedIn = useSessionStore((s) => s.setSignedIn);
+  const setPending = usePendingTournamentStore((s) => s.setPending);
+  const queryClient = useQueryClient();
   const [helpOpen, setHelpOpen] = useState(false);
 
   const meQuery = useQuery({ queryKey: ["me"], queryFn: api.me });
@@ -51,17 +56,26 @@ export default function ProfileScreen() {
     };
   }, [historyQuery.data]);
 
+  // Sign-out and deletion both end here: drop the cached queries and the
+  // pending-tournament pointer too, so the next account on this device never
+  // sees the previous one's data.
+  const endSession = useCallback(() => {
+    queryClient.clear();
+    setPending(null);
+    setSignedIn(false);
+  }, [queryClient, setPending, setSignedIn]);
+
   const signOut = useCallback(async () => {
     // Clears local session regardless of whether the server call itself
     // succeeds — "sign me out" should never leave someone stuck signed in
-    // just because the network hung (see with-timeout.ts's own doc comment).
+    // just because the network hung.
     try {
-      await withTimeout(authClient.signOut());
+      await authClient.signOut();
     } catch {
       // Local sign-out below still happens.
     }
-    setSignedIn(false);
-  }, [setSignedIn]);
+    endSession();
+  }, [endSession]);
 
   return (
     <>
@@ -73,6 +87,8 @@ export default function ProfileScreen() {
         }}
         contentContainerClassName="gap-5 px-4"
         showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
       >
         <View className="flex-row items-center justify-between">
           <Text className="font-display text-3xl uppercase tracking-[1.2px] text-cream">
@@ -134,6 +150,12 @@ export default function ProfileScreen() {
             <NotificationPreferences />
             <SecuritySection />
 
+            <View className="overflow-hidden rounded-2xl border border-stout-600 bg-stout-850">
+              <LinkRow label="Privacy policy" url={`${API_URL}/privacy`} />
+              <View className="h-px bg-stout-600" />
+              <LinkRow label="Terms of use" url={`${API_URL}/terms`} />
+            </View>
+
             <Pressable
               onPress={() => void signOut()}
               accessibilityRole="button"
@@ -145,7 +167,7 @@ export default function ProfileScreen() {
               </Text>
             </Pressable>
 
-            <DeleteAccount onDeleted={() => setSignedIn(false)} />
+            <DeleteAccount onDeleted={endSession} />
           </>
         )}
       </ScrollView>
@@ -254,13 +276,13 @@ function HelpModal({ visible, onClose }: { visible: boolean; onClose: () => void
   );
 }
 
-// ── Account: avatar, name/phone edit, email verification ───────────────────
+// ── Account: avatar, name/phone edit ───────────────────────────────────────
 
 function AccountCard({ me }: { me: MeResponse }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(me.user.displayName);
-  const [phone, setPhone] = useState(me.user.phone);
+  const [phone, setPhone] = useState(me.user.phone ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -283,13 +305,15 @@ function AccountCard({ me }: { me: MeResponse }) {
       // server's `auth` instance, so TS only knows the base updateUser shape
       // and would apply excess-property checking to a literal. `displayName`/
       // `phone` (Better Auth additionalFields, see apps/web/lib/auth.ts) still
-      // reach the server at runtime either way.
+      // reach the server at runtime either way. Phone is optional: an empty
+      // field saves null, never "" — the column is unique, so a second ""
+      // would collide.
       const payload = {
         name: displayName.trim(),
         displayName: displayName.trim(),
-        phone: phone.trim(),
+        phone: phone.trim() || null,
       };
-      const res = await withTimeout(authClient.updateUser(payload));
+      const res = await authClient.updateUser(payload);
       if (res.error) {
         setSaveError(res.error.message ?? "Couldn't save those changes.");
         return;
@@ -305,11 +329,8 @@ function AccountCard({ me }: { me: MeResponse }) {
 
   const pickAvatar = useCallback(async () => {
     setAvatarError(null);
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setAvatarError("Allow photo library access in Settings to set a profile picture.");
-      return;
-    }
+    // No permission request: the system photo picker runs out of process
+    // and needs none, so asking would only add a prompt.
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: true,
@@ -373,6 +394,8 @@ function AccountCard({ me }: { me: MeResponse }) {
               value={displayName}
               onChangeText={setDisplayName}
               autoCapitalize="words"
+              textContentType="name"
+              autoComplete="name"
               accessibilityLabel="Name"
               className="rounded-lg border border-stout-500 bg-stout-900/70 px-3 py-2 font-sans-med text-[15px] text-cream"
             />
@@ -388,6 +411,7 @@ function AccountCard({ me }: { me: MeResponse }) {
           disabled={saving}
           accessibilityRole="button"
           accessibilityLabel={editing ? "Save profile" : "Edit profile"}
+          hitSlop={12}
           className="px-2 py-1"
         >
           {saving ? (
@@ -403,19 +427,24 @@ function AccountCard({ me }: { me: MeResponse }) {
       {editing ? (
         <View className="gap-1.5">
           <Text className="font-sans-med text-[11px] uppercase tracking-[1.1px] text-cream-faint">
-            Phone
+            Phone (optional)
           </Text>
           <TextInput
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
-            accessibilityLabel="Phone"
+            textContentType="telephoneNumber"
+            autoComplete="tel"
+            accessibilityLabel="Phone, optional"
             className="rounded-lg border border-stout-500 bg-stout-900/70 px-3 py-2 font-sans text-[15px] text-cream"
           />
+          <Text className="font-sans text-[12px] leading-[17px] text-cream-dim">
+            Optional. Lets venues you&rsquo;ve played at tell you about future tournaments.
+          </Text>
         </View>
       ) : (
         <Text className="font-sans text-[13px] text-cream-dim">
-          {me.user.phone || "No phone on file"}
+          {me.user.phone || "No phone on file (optional)"}
         </Text>
       )}
       {saveError ? <Text className="font-sans text-[12px] text-dispute">{saveError}</Text> : null}
@@ -428,11 +457,27 @@ function AccountCard({ me }: { me: MeResponse }) {
           onPress={() => void removeAvatar()}
           disabled={avatarBusy}
           accessibilityRole="button"
+          hitSlop={12}
+          className="self-start py-1"
         >
           <Text className="font-sans-med text-[12px] text-cream-faint">Remove photo</Text>
         </Pressable>
       ) : null}
     </View>
+  );
+}
+
+function LinkRow({ label, url }: { label: string; url: string }) {
+  return (
+    <Pressable
+      onPress={() => void Linking.openURL(url)}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      className="min-h-[48px] flex-row items-center justify-between px-4 active:opacity-70"
+    >
+      <Text className="font-sans-med text-[14px] text-cream">{label}</Text>
+      <Ionicons name="open-outline" size={16} color={raw.textFaint} />
+    </Pressable>
   );
 }
 
@@ -533,9 +578,7 @@ function SecuritySection() {
     }
     setBusy(true);
     try {
-      const res = await withTimeout(
-        authClient.changePassword({ currentPassword: current, newPassword: next })
-      );
+      const res = await authClient.changePassword({ currentPassword: current, newPassword: next });
       if (res.error) {
         setError(res.error.message ?? "Couldn't change your password. Check your current one.");
         return;
@@ -568,7 +611,7 @@ function SecuritySection() {
 
       {open ? (
         <View className="gap-2">
-          <SecureField label="Current password" value={current} onChangeText={setCurrent} />
+          <SecureField label="Current password" value={current} onChangeText={setCurrent} current />
           <SecureField label="New password" value={next} onChangeText={setNext} />
           <SecureField label="Confirm new password" value={confirm} onChangeText={setConfirm} />
           {error ? <Text className="font-sans text-[12px] text-dispute">{error}</Text> : null}
@@ -600,10 +643,12 @@ function SecureField({
   label,
   value,
   onChangeText,
+  current = false,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
+  current?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   return (
@@ -617,10 +662,18 @@ function SecureField({
           onChangeText={onChangeText}
           secureTextEntry={!visible}
           autoCapitalize="none"
+          textContentType={current ? "password" : "newPassword"}
+          autoComplete={current ? "current-password" : "new-password"}
           accessibilityLabel={label}
           className="min-h-[44px] flex-1 px-3 font-sans text-[15px] text-cream"
         />
-        <Pressable onPress={() => setVisible((v) => !v)} className="px-3" hitSlop={8}>
+        <Pressable
+          onPress={() => setVisible((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          className="min-h-[44px] justify-center px-3"
+          hitSlop={8}
+        >
           <Text className="font-sans-med text-[11px] text-cream-faint">
             {visible ? "Hide" : "Show"}
           </Text>
@@ -652,7 +705,7 @@ function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
               setBusy(true);
               setError(null);
               try {
-                const res = await withTimeout(authClient.deleteUser({ password }));
+                const res = await authClient.deleteUser({ password });
                 if (res.error) {
                   setError(
                     res.error.message ?? "Couldn't delete your account. Check your password."
@@ -678,7 +731,7 @@ function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel="Delete account"
-        className="items-center py-2"
+        className="min-h-[44px] items-center justify-center"
       >
         <Text className="font-sans-med text-[13px] text-dispute">Delete account</Text>
       </Pressable>
@@ -695,6 +748,8 @@ function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
         onChangeText={setPassword}
         secureTextEntry
         autoCapitalize="none"
+        textContentType="password"
+        autoComplete="current-password"
         placeholder="Password"
         placeholderTextColor={raw.textFaint}
         accessibilityLabel="Password"
@@ -708,6 +763,7 @@ function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
             setPassword("");
             setError(null);
           }}
+          accessibilityRole="button"
           className="min-h-[44px] flex-1 items-center justify-center rounded-lg border border-stout-500 active:opacity-70"
         >
           <Text className="font-sans-med text-[13px] text-cream">Cancel</Text>

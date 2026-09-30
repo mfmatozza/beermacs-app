@@ -31,7 +31,13 @@ export default function AdminLoginPage() {
       });
       const data = (await res.json()) as { needsOtp?: boolean; error?: string };
       if (!res.ok) {
-        setError(data.error === "invalid_credentials" ? "Wrong username or password." : "Couldn't sign in.");
+        setError(
+          data.error === "invalid_credentials"
+            ? "Wrong username or password."
+            : data.error === "locked"
+              ? "Too many failed attempts from this network. Unlock it from Security on a signed-in device, or try again tomorrow."
+              : "Couldn't sign in."
+        );
         return;
       }
       if (data.needsOtp) {
@@ -58,7 +64,12 @@ export default function AdminLoginPage() {
         body: JSON.stringify({ otp }),
       });
       if (!res.ok) {
-        setError("That code is wrong or expired.");
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(
+          data.error === "locked"
+            ? "Too many failed attempts from this network."
+            : "That code is wrong or expired. Each code works once — sign in again for a new one."
+        );
         return;
       }
       router.push("/admin");

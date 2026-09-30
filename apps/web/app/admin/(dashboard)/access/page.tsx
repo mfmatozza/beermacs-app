@@ -20,7 +20,8 @@ interface FoundUser {
   memberships: readonly { role: string; venue: { id: string; name: string } }[];
 }
 
-const ROLES = ["PLAYER", "VENUE_STAFF", "VENUE_ADMIN", "VENUE_OWNER"] as const;
+// No PLAYER: joining any tournament at a venue already grants it.
+const ROLES = ["VENUE_STAFF", "VENUE_ADMIN", "VENUE_OWNER"] as const;
 const ROLE_LABEL: Record<string, string> = {
   PLAYER: "Player",
   VENUE_STAFF: "Staff",
@@ -52,8 +53,12 @@ function GrantPanel() {
 
   useEffect(() => {
     void fetch("/api/admin/venues")
-      .then((r) => r.json())
-      .then((d) => setVenues(d.venues ?? []));
+      .then((r) => {
+        if (r.status === 401) window.location.href = "/admin/login";
+        return r.json();
+      })
+      .then((d) => setVenues(d.venues ?? []))
+      .catch(() => setError("Couldn't load venues. Reload the page."));
   }, []);
 
   const search = async () => {
@@ -80,6 +85,8 @@ function GrantPanel() {
 
   const grant = async () => {
     if (!venueId) return;
+    const venueName = venues.find((v) => v.id === venueId)?.name ?? "this venue";
+    if (role === "VENUE_OWNER" && !confirm(`Make ${email.trim()} an OWNER of ${venueName}? Owners can delete tournaments.`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -101,7 +108,8 @@ function GrantPanel() {
     }
   };
 
-  const revoke = async (uid: string, vid: string) => {
+  const revoke = async (uid: string, vid: string, venueName: string) => {
+    if (!confirm(`Revoke ${found?.displayName ?? "this account"}'s role at ${venueName}?`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -166,9 +174,9 @@ function GrantPanel() {
                     <Badge tone={m.role === "PLAYER" ? "neutral" : "brand"}>{ROLE_LABEL[m.role] ?? m.role}</Badge>
                   </span>
                   <button
-                    onClick={() => void revoke(found.id, m.venue.id)}
+                    onClick={() => void revoke(found.id, m.venue.id, m.venue.name)}
                     disabled={busy}
-                    className="text-xs font-medium uppercase tracking-wide text-red-600 hover:underline disabled:opacity-40"
+                    className="py-1 text-xs font-medium uppercase tracking-wide text-red-600 hover:underline disabled:opacity-40"
                   >
                     Revoke
                   </button>

@@ -16,6 +16,12 @@ const fmt = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
+const SOURCE_LABEL: Record<SupportMessageData["source"], string> = {
+  WEB: "Web",
+  MOBILE: "App",
+  CHAT_REPORT: "Chat report",
+};
+
 async function resolveToggle(id: string) {
   const res = await fetch(`/api/admin/support/${id}/resolve`, { method: "POST" });
   if (!res.ok) throw new Error("http_" + res.status);
@@ -98,8 +104,8 @@ function MessageCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-gray-900">{m.name}</span>
-            <Badge tone={m.source === "MOBILE" ? "brand" : "neutral"}>
-              {m.source === "MOBILE" ? "App" : "Web"}
+            <Badge tone={m.source === "WEB" ? "neutral" : "brand"}>
+              {SOURCE_LABEL[m.source]}
             </Badge>
             {m.userId ? <span className="text-xs text-gray-400">has an account</span> : null}
           </div>

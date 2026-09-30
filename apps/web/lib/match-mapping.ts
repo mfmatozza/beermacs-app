@@ -8,6 +8,7 @@
 import type { Match, PendingReport } from "@beermacs/shared";
 import type { MatchState, PrismaClient } from "@beermacs/db";
 import { prisma } from "@beermacs/db";
+import { HttpError } from "./session";
 
 export const MATCH_STATE_TO_DOMAIN: Record<MatchState, Match["state"]> = {
   SCHEDULED: "scheduled",
@@ -146,4 +147,52 @@ export async function advanceWinnerToNextRound(
     create: { roundId: nextRound.id, teamId: match.winnerTeamId, viaRepechage: false },
     update: {},
   });
+}
+
+// ── Guarded writes ───────────────────────────────────────────────────────
+//
+// Every result route reads the match, runs transition() on what it read, then
+// writes. Two requests racing (staff resolve vs captain confirm, a double
+// tap) would both pass the check and both write — and both winners advance.
+// Conditioning the write on the state we read turns the loser into a 409.
+
+export async function updateMatchFrom(
+  tx: Pick<PrismaClient, "match">,
+  matchId: string,
+  fromState: MatchState,
+  data: Parameters<PrismaClient["match"]["updateMany"]>[0]["data"]
+): Promise<void> {
+  const r = await tx.match.updateMany({ where: { id: matchId, state: fromState }, data });
+  if (r.count === 0) throw new HttpError(409, "match_changed");
+}
+
+/**
+ * Re-settling an already-CONFIRMED match with a different winner: the old
+ * winner was advanced into the next round and must come back out — unless it
+ * has already been drawn into a match there, where undoing it would rewrite
+ * a bracket people are playing. That case is refused rather than guessed at.
+ */
+export async function retractWinnerFromNextRound(
+  tx: Pick<PrismaClient, "round" | "roundEntrant" | "match">,
+  match: { roundId: string; winnerTeamId: string | null; groupId: string | null }
+): Promise<void> {
+  if (!match.winnerTeamId || match.groupId) return;
+  const round = await tx.round.findUniqueOrThrow({
+    where: { id: match.roundId },
+    select: { stageId: true, index: true },
+  });
+  const next = await tx.round.findUnique({
+    where: { stageId_index: { stageId: round.stageId, index: round.index + 1 } },
+    select: { id: true },
+  });
+  if (!next) return;
+  const played = await tx.match.findFirst({
+    where: {
+      roundId: next.id,
+      OR: [{ homeTeamId: match.winnerTeamId }, { awayTeamId: match.winnerTeamId }],
+    },
+    select: { id: true },
+  });
+  if (played) throw new HttpError(409, "winner_already_in_next_match");
+  await tx.roundEntrant.deleteMany({ where: { roundId: next.id, teamId: match.winnerTeamId } });
 }
